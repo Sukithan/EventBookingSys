@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.orm import Session
 from sqlalchemy import or_
 from typing import List, Optional
-from datetime import datetime
+from datetime import datetime, timezone
 
 from database import get_db
 from models import Event, User
@@ -48,7 +48,7 @@ async def get_upcoming_events(
     db: Session = Depends(get_db)
 ):
     """Get upcoming events"""
-    current_time = datetime.utcnow()
+    current_time = datetime.now(timezone.utc)
     events = db.query(Event).filter(
         Event.is_active == True,
         Event.event_date >= current_time,
@@ -81,15 +81,25 @@ async def create_event(
 ):
     """Create a new event (Admin only)"""
     try:
+        # Convert event_date to timezone-aware if it's naive
+        event_date = event_data.event_date
+        if event_date.tzinfo is None:
+            event_date = event_date.replace(tzinfo=timezone.utc)
+        
         # Validate event date is in the future
-        if event_data.event_date <= datetime.utcnow():
+        current_time = datetime.now(timezone.utc)
+        if event_date <= current_time:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Event date must be in the future"
             )
         
+        # Create event data dict and update the event_date
+        event_dict = event_data.model_dump()
+        event_dict['event_date'] = event_date
+        
         db_event = Event(
-            **event_data.model_dump(),
+            **event_dict,
             available_seats=event_data.total_seats,
             created_by=current_user.id if hasattr(current_user, 'id') and current_user.id != 0 else None
         )

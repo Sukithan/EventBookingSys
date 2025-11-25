@@ -27,7 +27,7 @@ class Event(Base):
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String, nullable=False, index=True)
     description = Column(Text, nullable=True)
-    event_date = Column(DateTime, nullable=False)
+    event_date = Column(DateTime(timezone=True), nullable=False)
     location = Column(String, nullable=False)
     total_seats = Column(Integer, nullable=False)
     available_seats = Column(Integer, nullable=False)
