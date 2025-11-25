@@ -1,114 +1,134 @@
 <template>
-  <div>
-    <!-- Hero Section with Tailwind -->
-    <div class="bg-gradient-to-r from-blue-500 to-purple-600 text-white py-20">
-      <div class="container mx-auto text-center px-4">
-        <h1 class="text-5xl font-bold mb-4">Welcome to the Project</h1>
-        <p class="text-xl mb-8">FastAPI + Nuxt.js + Vuetify + Tailwind CSS</p>
-        <v-btn size="large" color="white" variant="elevated" to="/items">
-          Get Started
-        </v-btn>
-      </div>
-    </div>
+  <v-container fluid class="pa-0">
+    <!-- Hero Section -->
+    <v-row no-gutters>
+      <v-col cols="12">
+        <v-card class="rounded-0" color="primary" dark>
+          <v-card-text class="py-12">
+            <v-container>
+              <v-row justify="center" align="center">
+                <v-col cols="12" md="8" class="text-center">
+                  <h1 class="text-h2 font-weight-bold mb-4">Welcome to Event Booking</h1>
+                  <p class="text-h6 mb-6">Discover and book amazing events happening near you</p>
+                  <v-text-field v-model="searchQuery" label="Search events..." prepend-inner-icon="mdi-magnify"
+                    variant="outlined" bg-color="white" hide-details @input="handleSearch" class="mx-auto"
+                    style="max-width: 600px;"></v-text-field>
+                </v-col>
+              </v-row>
+            </v-container>
+          </v-card-text>
+        </v-card>
+      </v-col>
+    </v-row>
 
-    <!-- Features Section with Vuetify Cards -->
-    <v-container class="my-12">
-      <h2 class="text-4xl font-bold text-center mb-8">Tech Stack</h2>
+    <!-- Events Section -->
+    <v-container class="py-8">
       <v-row>
-        <v-col cols="12" md="3" sm="6" v-for="(feature, index) in features" :key="index">
-          <v-card class="h-full" hover elevation="2">
-            <v-card-title class="text-h5 justify-center">
-              <v-icon size="48" :color="feature.color" class="mb-2">
-                {{ feature.icon }}
-              </v-icon>
-            </v-card-title>
-            <v-card-title class="justify-center">
-              {{ feature.title }}
-            </v-card-title>
-            <v-card-text class="text-center">
-              {{ feature.description }}
+        <v-col cols="12">
+          <h2 class="text-h4 font-weight-bold mb-6">
+            {{ searchQuery ? 'Search Results' : 'Upcoming Events' }}
+          </h2>
+        </v-col>
+      </v-row>
+
+      <v-row v-if="loading">
+        <v-col v-for="n in 6" :key="n" cols="12" sm="6" md="4">
+          <v-skeleton-loader type="card"></v-skeleton-loader>
+        </v-col>
+      </v-row>
+
+      <v-row v-else-if="displayEvents.length > 0">
+        <v-col v-for="event in displayEvents" :key="event.id" cols="12" sm="6" md="4">
+          <v-card hover @click="viewEvent(event.id)" class="h-100">
+            <v-img :src="event.image_url || 'https://via.placeholder.com/400x250?text=Event'" height="200" cover>
+              <template v-slot:placeholder>
+                <v-row class="fill-height ma-0" align="center" justify="center">
+                  <v-progress-circular indeterminate color="primary"></v-progress-circular>
+                </v-row>
+              </template>
+            </v-img>
+
+            <v-card-title class="text-h6">{{ event.name }}</v-card-title>
+
+            <v-card-text>
+              <div class="text-body-2 mb-2">
+                <v-icon size="small" class="mr-1">mdi-calendar</v-icon>
+                {{ formatDate(event.event_date) }}
+              </div>
+              <div class="text-body-2 mb-2">
+                <v-icon size="small" class="mr-1">mdi-map-marker</v-icon>
+                {{ event.location }}
+              </div>
+              <div class="text-body-2 mb-2">
+                <v-icon size="small" class="mr-1">mdi-seat</v-icon>
+                {{ event.available_seats }} / {{ event.total_seats }} seats available
+              </div>
+              <div class="text-h6 primary--text mt-2">
+                ${{ event.price.toFixed(2) }}
+              </div>
             </v-card-text>
+
+            <v-card-actions>
+              <v-chip :color="event.available_seats > 0 ? 'success' : 'error'" size="small" variant="flat">
+                {{ event.available_seats > 0 ? 'Available' : 'Sold Out' }}
+              </v-chip>
+              <v-spacer></v-spacer>
+              <v-btn color="primary" variant="text">
+                View Details
+                <v-icon end>mdi-arrow-right</v-icon>
+              </v-btn>
+            </v-card-actions>
           </v-card>
         </v-col>
       </v-row>
-    </v-container>
 
-    <!-- API Status Section -->
-    <div class="bg-gray-100 py-12">
-      <v-container>
-        <h2 class="text-3xl font-bold text-center mb-8">API Status</h2>
-        <v-card max-width="600" class="mx-auto">
-          <v-card-text>
-            <div v-if="loading" class="text-center">
-              <v-progress-circular indeterminate color="primary"></v-progress-circular>
-            </div>
-            <div v-else-if="apiStatus">
-              <div class="flex items-center justify-between mb-2">
-                <span class="font-semibold">Status:</span>
-                <v-chip :color="apiStatus.status === 'running' ? 'success' : 'error'">
-                  {{ apiStatus.status }}
-                </v-chip>
-              </div>
-              <div class="flex items-center justify-between mb-2">
-                <span class="font-semibold">Version:</span>
-                <span>{{ apiStatus.version }}</span>
-              </div>
-              <div class="flex items-center justify-between">
-                <span class="font-semibold">Message:</span>
-                <span>{{ apiStatus.message }}</span>
-              </div>
-            </div>
-            <div v-else class="text-center text-red-500">
-              Failed to connect to API
-            </div>
-          </v-card-text>
-        </v-card>
-      </v-container>
-    </div>
-  </div>
+      <v-row v-else>
+        <v-col cols="12" class="text-center py-12">
+          <v-icon size="80" color="grey-lighten-1">mdi-calendar-blank</v-icon>
+          <p class="text-h6 text-grey mt-4">No events found</p>
+          <p class="text-body-1 text-grey">Check back later for upcoming events</p>
+        </v-col>
+      </v-row>
+    </v-container>
+  </v-container>
 </template>
 
 <script setup lang="ts">
-const { $api } = useNuxtApp()
+const { fetchUpcomingEvents, fetchEvents, events } = useEvents()
+const router = useRouter()
 
-const features = [
-  {
-    title: 'FastAPI',
-    description: 'Modern, fast Python web framework for building APIs',
-    icon: 'mdi-lightning-bolt',
-    color: 'green'
-  },
-  {
-    title: 'Nuxt.js 3',
-    description: 'Intuitive Vue framework for web applications',
-    icon: 'mdi-vuejs',
-    color: 'green'
-  },
-  {
-    title: 'Vuetify',
-    description: 'Material Design component framework for Vue',
-    icon: 'mdi-material-design',
-    color: 'blue'
-  },
-  {
-    title: 'Tailwind CSS',
-    description: 'Utility-first CSS framework for rapid UI development',
-    icon: 'mdi-tailwind',
-    color: 'cyan'
-  }
-]
+const searchQuery = ref('')
+const loading = ref(false)
+const displayEvents = computed(() => events.value || [])
 
-const loading = ref(true)
-const apiStatus = ref<any>(null)
+const loadEvents = async () => {
+  loading.value = true
+  await fetchUpcomingEvents()
+  loading.value = false
+}
 
-onMounted(async () => {
-  try {
-    const data = await $api('/')
-    apiStatus.value = data
-  } catch (error) {
-    console.error('Failed to fetch API status:', error)
-  } finally {
-    loading.value = false
-  }
+const handleSearch = async () => {
+  loading.value = true
+  await fetchEvents(searchQuery.value)
+  loading.value = false
+}
+
+const viewEvent = (id: number) => {
+  router.push(`/events/${id}`)
+}
+
+const formatDate = (dateString: string) => {
+  const date = new Date(dateString)
+  return date.toLocaleDateString('en-US', {
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit'
+  })
+}
+
+onMounted(() => {
+  loadEvents()
 })
 </script>
