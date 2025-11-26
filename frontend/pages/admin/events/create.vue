@@ -24,9 +24,23 @@
 
                             <v-row>
                                 <v-col cols="12" sm="6">
-                                    <v-text-field v-model.number="eventData.total_seats" label="Total Seats *"
-                                        type="number" :rules="[rules.required, rules.positive]"
-                                        variant="outlined"></v-text-field>
+                                    <v-text-field v-model.number="eventData.rows" label="Number of Rows *" type="number"
+                                        :rules="[rules.required, rules.positive]" variant="outlined"
+                                        @input="calculateTotalSeats"></v-text-field>
+                                </v-col>
+                                <v-col cols="12" sm="6">
+                                    <v-text-field v-model.number="eventData.seats_per_row" label="Seats per Row *"
+                                        type="number" :rules="[rules.required, rules.positive]" variant="outlined"
+                                        @input="calculateTotalSeats"></v-text-field>
+                                </v-col>
+                            </v-row>
+
+                            <v-row>
+                                <v-col cols="12" sm="6">
+                                    <v-text-field v-model.number="eventData.total_seats" label="Total Seats"
+                                        type="number" variant="outlined" readonly
+                                        hint="Automatically calculated from rows × seats per row"
+                                        persistent-hint></v-text-field>
                                 </v-col>
                                 <v-col cols="12" sm="6">
                                     <v-text-field v-model.number="eventData.price" label="Price *" type="number"
@@ -74,15 +88,33 @@ const eventData = reactive({
     description: '',
     event_date: '',
     location: '',
+    rows: 10,
+    seats_per_row: 10,
     total_seats: 100,
     price: 0,
     image_url: ''
+})
+
+// Watch for changes in rows and seats_per_row to automatically calculate total_seats
+watch([() => eventData.rows, () => eventData.seats_per_row], () => {
+    calculateTotalSeats()
+})
+
+// Initialize total seats on component mount
+onMounted(() => {
+    calculateTotalSeats()
 })
 
 const rules = {
     required: (v: any) => !!v || 'This field is required',
     positive: (v: number) => v > 0 || 'Must be greater than 0',
     nonNegative: (v: number) => v >= 0 || 'Must be 0 or greater'
+}
+
+const calculateTotalSeats = () => {
+    if (eventData.rows > 0 && eventData.seats_per_row > 0) {
+        eventData.total_seats = eventData.rows * eventData.seats_per_row
+    }
 }
 
 const handleCreate = async () => {

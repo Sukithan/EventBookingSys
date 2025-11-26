@@ -4,12 +4,13 @@
         <v-row no-gutters>
             <v-col cols="12">
                 <v-card class="rounded-0" color="primary" dark>
-                    <v-card-text class="py-12">
+                    <v-card-text class="py-8 py-md-12">
                         <v-container>
                             <v-row justify="center" align="center">
-                                <v-col cols="12" md="8" class="text-center">
-                                    <h1 class="text-h2 font-weight-bold mb-4">Welcome to Event Booking</h1>
-                                    <p class="text-h6 mb-6">Discover and book amazing events happening near you</p>
+                                <v-col cols="12" md="8" class="text-center px-4">
+                                    <h1 class="text-h4 text-md-h2 font-weight-bold mb-4">Welcome to Event Booking</h1>
+                                    <p class="text-body-1 text-md-h6 mb-6">Discover and book amazing events happening
+                                        near you</p>
                                     <v-text-field v-model="searchQuery" label="Search events..."
                                         prepend-inner-icon="mdi-magnify" variant="outlined" bg-color="white"
                                         hide-details @input="handleSearch" class="mx-auto"
@@ -39,10 +40,10 @@
             </v-row>
 
             <v-row v-else-if="displayEvents.length > 0">
-                <v-col v-for="event in displayEvents" :key="event.id" cols="12" sm="6" md="4">
+                <v-col v-for="event in displayEvents" :key="event.id" cols="12" sm="6" lg="4">
                     <v-card hover @click="viewEvent(event.id)" class="h-100">
-                        <v-img :src="event.image_url || 'https://via.placeholder.com/400x250?text=Event'" height="200"
-                            cover>
+                        <v-img :src="event.image_url || 'https://via.placeholder.com/400x250?text=Event'"
+                            :height="$vuetify.display.xs ? '150' : '200'" cover>
                             <template v-slot:placeholder>
                                 <v-row class="fill-height ma-0" align="center" justify="center">
                                     <v-progress-circular indeterminate color="primary"></v-progress-circular>

@@ -1,7 +1,7 @@
 <template>
     <v-container class="fill-height" fluid>
         <v-row align="center" justify="center">
-            <v-col cols="12" sm="8" md="6" lg="4">
+            <v-col cols="12" sm="10" md="6" lg="4">
                 <v-card elevation="8">
                     <v-card-title class="text-h4 text-center py-6 bg-primary">
                         <span class="text-white">Login</span>
@@ -79,9 +79,9 @@ const handleLogin = async () => {
 
     if (result.success) {
         if (result.user.is_admin) {
-            router.push('/admin')
+            router.push('/admin/dashboard')
         } else {
-            router.push('/my-bookings')
+            router.push('/')
         }
     } else {
         error.value = result.error

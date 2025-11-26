@@ -12,9 +12,11 @@
       <v-spacer></v-spacer>
 
       <template v-if="isAuthenticated">
-        <v-btn v-if="isAdmin" to="/admin/dashboard" icon title="Admin">
-          <v-icon>mdi-shield-account</v-icon>
-        </v-btn>
+        <ClientOnly>
+          <v-btn v-if="isAdmin" to="/admin/dashboard" icon title="Admin">
+            <v-icon>mdi-shield-account</v-icon>
+          </v-btn>
+        </ClientOnly>
         <v-btn to="/my-bookings" icon title="My Bookings">
           <v-icon>mdi-ticket</v-icon>
         </v-btn>
@@ -64,7 +66,7 @@
           <v-list-item prepend-icon="mdi-login" title="Login" to="/login"></v-list-item>
           <v-list-item prepend-icon="mdi-account-plus" title="Sign Up" to="/signup"></v-list-item>
           <v-divider class="my-2"></v-divider>
-          <v-list-item prepend-icon="mdi-shield-lock" title="Admin Login" to="/admin/login"></v-list-item>
+          <!-- <v-list-item prepend-icon="mdi-shield-lock" title="Admin Login" to="/admin/login"></v-list-item> -->
         </template>
       </v-list>
     </v-navigation-drawer>
@@ -86,13 +88,23 @@
 </template>
 
 <script setup lang="ts">
-const { isAuthenticated, isAdmin, user, logout } = useAuth()
+const { isAuthenticated, isAdmin, user, logout, initializeAuth } = useAuth()
 const drawer = ref(false)
 
 const handleLogout = () => {
   drawer.value = false
   logout()
 }
+
+// Initialize auth state on mount (as backup to plugin) - only if not already initialized
+onMounted(async () => {
+  // Give the plugin time to initialize first
+  setTimeout(async () => {
+    if (!isAuthenticated.value) {
+      await initializeAuth()
+    }
+  }, 100)
+})
 </script>
 
 <style scoped>

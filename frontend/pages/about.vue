@@ -1,14 +1,14 @@
 <template>
-  <div>
+  <v-container>
     <v-card max-width="800" class="mx-auto" elevation="3">
-      <v-card-title class="text-h4 text-center bg-primary text-white py-6">
+      <v-card-title class="text-h5 text-sm-h4 text-center bg-primary text-white py-4 py-sm-6">
         About This Project
       </v-card-title>
-      
-      <v-card-text class="pa-8">
+
+      <v-card-text class="pa-4 pa-sm-8">
         <div class="mb-6">
           <h2 class="text-2xl font-bold mb-4">Technology Stack</h2>
-          
+
           <div class="space-y-4">
             <div class="border-l-4 border-green-500 pl-4">
               <h3 class="text-xl font-semibold mb-2">Backend: FastAPI</h3>
@@ -83,7 +83,7 @@
         </div>
       </v-card-text>
     </v-card>
-  </div>
+  </v-container>
 </template>
 
 <script setup lang="ts">
@@ -91,7 +91,7 @@
 </script>
 
 <style scoped>
-.space-y-4 > * + * {
+.space-y-4>*+* {
   margin-top: 1rem;
 }
 </style>

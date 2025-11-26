@@ -41,6 +41,28 @@ export default defineNuxtConfig({
         }
     },
 
+    // SSR Configuration
+    ssr: true,
+
+    // Ensure proper hydration
+    app: {
+        head: {
+            script: [
+                {
+                    innerHTML: `
+                        // Prevent FOUC (Flash of Unstyled Content) for auth state
+                        window.__NUXT_AUTH_LOADING__ = true;
+                    `
+                }
+            ]
+        }
+    },
+
+    // Experimental features for better hydration
+    experimental: {
+        payloadExtraction: false
+    },
+
     // Tailwind CSS configuration
     tailwindcss: {
         cssPath: '~/assets/css/tailwind.css',

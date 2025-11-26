@@ -28,3 +28,7 @@ htmlcov/
 dist/
 build/
 *.egg-info/
+
+alembic
+backend_venv
+alembic.ini

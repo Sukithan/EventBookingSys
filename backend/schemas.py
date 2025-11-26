@@ -40,6 +40,8 @@ class EventBase(BaseModel):
     total_seats: int = Field(..., gt=0)
     price: float = Field(..., ge=0)
     image_url: Optional[str] = None
+    rows: int = Field(default=10, gt=0)
+    seats_per_row: int = Field(default=10, gt=0)
 
 class EventCreate(EventBase):
     pass
@@ -54,6 +56,8 @@ class EventUpdate(BaseModel):
     price: Optional[float] = None
     image_url: Optional[str] = None
     is_active: Optional[bool] = None
+    rows: Optional[int] = None
+    seats_per_row: Optional[int] = None
 
 class EventResponse(EventBase):
     id: int
@@ -69,10 +73,41 @@ class EventResponse(EventBase):
 #------------------------------------------------------------------------------------------------------
 
 
+# Seat Schemas
+class SeatResponse(BaseModel):
+    id: int
+    row_number: int
+    seat_number: int
+    is_available: bool
+    is_locked: Optional[bool] = False
+    locked_by_current_user: Optional[bool] = False
+    
+    class Config:
+        from_attributes = True
+
+class SeatLockCreate(BaseModel):
+    seat_ids: List[int]
+
+class SeatLockResponse(BaseModel):
+    seat_id: int
+    locked_until: datetime
+    
+    class Config:
+        from_attributes = True
+
 # Booking Schemas
 class BookingCreate(BaseModel):
     event_id: int
-    seats_booked: int = Field(default=1, gt=0)
+    seat_ids: List[int] = Field(..., min_length=1)  # List of seat IDs to book
+
+class SeatBookingResponse(BaseModel):
+    id: int
+    seat_id: int
+    row_number: int
+    seat_number: int
+    
+    class Config:
+        from_attributes = True
 
 class BookingResponse(BaseModel):
     id: int
@@ -83,6 +118,7 @@ class BookingResponse(BaseModel):
     status: str
     total_price: float
     created_at: datetime
+    seat_details: Optional[List[SeatBookingResponse]] = []
     
     class Config:
         from_attributes = True
@@ -95,9 +131,13 @@ class BookingWithDetails(BookingResponse):
 
 class BookingWithUser(BookingResponse):
     user: UserResponse
+    seat_details: Optional[List[SeatBookingResponse]] = []
     
     class Config:
         from_attributes = True
+
+
+#------------------------------------------------------------------------------------------------------
 
 # Admin Schemas
 class BookingDetails(BaseModel):
@@ -116,6 +156,10 @@ class EventWithBookings(EventResponse):
     
     class Config:
         from_attributes = True
+
+# Partial Seat Cancellation Schema
+class PartialCancelRequest(BaseModel):
+    seat_ids: List[int] = Field(..., min_length=1)
 
 # Response Schemas
 class MessageResponse(BaseModel):

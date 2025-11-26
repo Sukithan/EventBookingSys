@@ -8,6 +8,7 @@ from models import User
 from schemas import UserCreate, UserLogin, UserResponse, Token
 from auth import verify_password, get_password_hash, create_access_token
 from config import settings
+from dependencies import get_current_user
 
 router = APIRouter(prefix="/api/auth", tags=["Authentication"])
 
@@ -54,8 +55,13 @@ async def register(user_data: UserCreate, db: Session = Depends(get_db)):
 @router.post("/login", response_model=Token)
 async def login(user_credentials: UserLogin, db: Session = Depends(get_db)):
     """Login user"""
+    print(f"Login attempt for username: {user_credentials.username}")
+    print(f"Admin username from settings: {settings.ADMIN_USERNAME}")
+    
     # Check for admin credentials from environment variables
     if user_credentials.username == settings.ADMIN_USERNAME and user_credentials.password == settings.ADMIN_PASSWORD:
+        print("Admin credentials matched successfully")
+        
         # Create access token for admin user
         access_token_expires = timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
         access_token = create_access_token(
@@ -72,6 +78,8 @@ async def login(user_credentials: UserLogin, db: Session = Depends(get_db)):
             is_active=True,
             created_at=datetime.utcnow()
         )
+        
+        print(f"Admin token created successfully for user: {admin_user_response.username}")
         
         return Token(
             access_token=access_token,
@@ -106,5 +114,11 @@ async def login(user_credentials: UserLogin, db: Session = Depends(get_db)):
         token_type="bearer",
         user=UserResponse.model_validate(user)
     )
+
+@router.get("/me", response_model=UserResponse)
+async def get_current_user_info(current_user: User = Depends(get_current_user)):
+    """Get current user information"""
+    print(f"Get current user info for: {current_user.username}, is_admin: {current_user.is_admin}")
+    return UserResponse.model_validate(current_user)
 
 

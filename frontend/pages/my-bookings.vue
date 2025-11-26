@@ -41,6 +41,17 @@
                                             <v-icon size="small" class="mr-2">mdi-seat</v-icon>
                                             <span class="text-body-2">{{ booking.seats_booked }} seat(s)</span>
                                         </div>
+                                        <div class="mb-2"
+                                            v-if="booking.seat_details && booking.seat_details.length > 0">
+                                            <v-icon size="small" class="mr-2">mdi-format-list-numbered</v-icon>
+                                            <span class="text-body-2">
+                                                Seats:
+                                                <v-chip v-for="seat in booking.seat_details" :key="seat.id"
+                                                    size="x-small" class="ma-1" color="primary" variant="outlined">
+                                                    {{ seat.row_number }}-{{ seat.seat_number }}
+                                                </v-chip>
+                                            </span>
+                                        </div>
                                         <div class="mb-2">
                                             <v-icon size="small" class="mr-2">mdi-clock</v-icon>
                                             <span class="text-body-2">Booked: {{ formatDate(booking.booking_date)
@@ -58,11 +69,18 @@
                                 {{ booking.status.toUpperCase() }}
                             </v-chip>
 
-                            <v-btn v-if="booking.status === 'confirmed'" color="error" variant="outlined" size="small"
-                                @click="openCancelDialog(booking)">
-                                <v-icon start>mdi-cancel</v-icon>
-                                Cancel Booking
-                            </v-btn>
+                            <div v-if="booking.status === 'confirmed'" class="d-flex flex-column gap-2 w-100">
+                                <v-btn color="error" variant="outlined" size="small" @click="openCancelDialog(booking)"
+                                    block>
+                                    <v-icon start>mdi-cancel</v-icon>
+                                    Cancel All
+                                </v-btn>
+                                <v-btn v-if="booking.seat_details && booking.seat_details.length > 1" color="warning"
+                                    variant="outlined" size="small" @click="openPartialCancelDialog(booking)" block>
+                                    <v-icon start>mdi-seat-outline</v-icon>
+                                    Cancel Seats
+                                </v-btn>
+                            </div>
                         </v-col>
                     </v-row>
                 </v-card>
@@ -85,7 +103,7 @@
             <v-card>
                 <v-card-title class="text-h6">Cancel Booking</v-card-title>
                 <v-card-text>
-                    <p>Are you sure you want to cancel this booking?</p>
+                    <p>Are you sure you want to cancel this entire booking?</p>
                     <p class="font-weight-bold mt-2">{{ selectedBooking?.event.name }}</p>
                     <p class="text-body-2">This action cannot be undone.</p>
                 </v-card-text>
@@ -93,6 +111,40 @@
                     <v-spacer></v-spacer>
                     <v-btn variant="text" @click="cancelDialog = false">No, Keep It</v-btn>
                     <v-btn color="error" :loading="cancelling" @click="confirmCancel">Yes, Cancel</v-btn>
+                </v-card-actions>
+            </v-card>
+        </v-dialog>
+
+        <!-- Partial Cancel Dialog -->
+        <v-dialog v-model="partialCancelDialog" max-width="600">
+            <v-card>
+                <v-card-title class="text-h6">Cancel Selected Seats</v-card-title>
+                <v-card-text>
+                    <p>Select the seats you want to cancel:</p>
+                    <p class="font-weight-bold mt-2">{{ selectedBooking?.event.name }}</p>
+
+                    <div class="mt-4">
+                        <v-row v-if="selectedBooking?.seat_details">
+                            <v-col v-for="seat in selectedBooking.seat_details" :key="seat.id" cols="6" sm="4">
+                                <v-checkbox v-model="selectedSeatsToCancel" :value="seat.seat_id"
+                                    :label="`Row ${seat.row_number}, Seat ${seat.seat_number}`"
+                                    hide-details></v-checkbox>
+                            </v-col>
+                        </v-row>
+                    </div>
+
+                    <v-alert v-if="selectedSeatsToCancel.length === selectedBooking?.seat_details?.length" type="info"
+                        class="mt-4">
+                        You're cancelling all seats. This will cancel the entire booking.
+                    </v-alert>
+                </v-card-text>
+                <v-card-actions>
+                    <v-spacer></v-spacer>
+                    <v-btn variant="text" @click="closePartialCancelDialog">Cancel</v-btn>
+                    <v-btn color="warning" :loading="cancelling" :disabled="selectedSeatsToCancel.length === 0"
+                        @click="confirmPartialCancel">
+                        Cancel {{ selectedSeatsToCancel.length }} Seat(s)
+                    </v-btn>
                 </v-card-actions>
             </v-card>
         </v-dialog>
@@ -112,12 +164,14 @@ definePageMeta({
     middleware: 'auth'
 })
 
-const { fetchMyBookings, cancelBooking, bookings } = useBookings()
+const { fetchMyBookings, cancelBooking, cancelPartialSeats, bookings } = useBookings()
 
 const loading = ref(false)
 const cancelling = ref(false)
 const cancelDialog = ref(false)
+const partialCancelDialog = ref(false)
 const selectedBooking = ref<any>(null)
+const selectedSeatsToCancel = ref<number[]>([])
 const snackbar = ref(false)
 const snackbarMessage = ref('')
 const snackbarColor = ref('success')
@@ -135,6 +189,18 @@ const openCancelDialog = (booking: any) => {
     cancelDialog.value = true
 }
 
+const openPartialCancelDialog = (booking: any) => {
+    selectedBooking.value = booking
+    selectedSeatsToCancel.value = []
+    partialCancelDialog.value = true
+}
+
+const closePartialCancelDialog = () => {
+    partialCancelDialog.value = false
+    selectedSeatsToCancel.value = []
+    selectedBooking.value = null
+}
+
 const confirmCancel = async () => {
     if (!selectedBooking.value) return
 
@@ -147,6 +213,26 @@ const confirmCancel = async () => {
         snackbarColor.value = 'success'
         snackbar.value = true
         cancelDialog.value = false
+        await loadBookings()
+    } else {
+        snackbarMessage.value = result.error
+        snackbarColor.value = 'error'
+        snackbar.value = true
+    }
+}
+
+const confirmPartialCancel = async () => {
+    if (!selectedBooking.value || selectedSeatsToCancel.value.length === 0) return
+
+    cancelling.value = true
+    const result = await cancelPartialSeats(selectedBooking.value.id, selectedSeatsToCancel.value)
+    cancelling.value = false
+
+    if (result.success) {
+        snackbarMessage.value = (result.data as any)?.message || 'Seats cancelled successfully'
+        snackbarColor.value = 'success'
+        snackbar.value = true
+        closePartialCancelDialog()
         await loadBookings()
     } else {
         snackbarMessage.value = result.error
