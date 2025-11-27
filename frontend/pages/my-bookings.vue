@@ -1,102 +1,39 @@
 <template>
     <v-container>
-        <v-row>
-            <v-col cols="12">
-                <div class="d-flex justify-space-between align-center mb-6">
-                    <h1 class="text-h4 font-weight-bold">My Bookings</h1>
-                    <v-btn color="primary" to="/" variant="outlined">
-                        <v-icon start>mdi-calendar-search</v-icon>
-                        Browse Events
-                    </v-btn>
-                </div>
+        <CommonPageHeader title="My Bookings" action-text="Browse Events" action-to="/"
+            action-icon="mdi-calendar-search" action-variant="outlined" />
+
+        <!-- Search Section -->
+        <v-row class="mb-4">
+            <v-col cols="12" md="6">
+                <v-text-field v-model="searchQuery" label="Search bookings..." prepend-inner-icon="mdi-magnify"
+                    variant="outlined" clearable @input="handleSearch"
+                    placeholder="Search by event name, location, or booking status"></v-text-field>
+            </v-col>
+            <v-col cols="12" md="6">
+                <v-select v-model="statusFilter" label="Filter by status" :items="statusOptions" variant="outlined"
+                    clearable @update:model-value="handleFilter"></v-select>
             </v-col>
         </v-row>
 
-        <v-row v-if="loading">
-            <v-col v-for="n in 3" :key="n" cols="12">
-                <v-skeleton-loader type="article"></v-skeleton-loader>
-            </v-col>
-        </v-row>
+        <CommonLoadingSkeleton v-if="loading" type="article" :count="3" />
+
+        <v-alert v-else-if="error" type="error" class="mb-4">
+            {{ error }}
+            <template v-slot:append>
+                <v-btn icon="mdi-refresh" variant="text" @click="loadBookings" :loading="loading"></v-btn>
+            </template>
+        </v-alert>
 
         <v-row v-else-if="displayBookings.length > 0">
             <v-col v-for="booking in displayBookings" :key="booking.id" cols="12">
-                <v-card class="mb-4">
-                    <v-row no-gutters>
-                        <v-col cols="12" md="8">
-                            <v-card-title class="text-h6">{{ booking.event.name }}</v-card-title>
-                            <v-card-text>
-                                <v-row>
-                                    <v-col cols="12" sm="6">
-                                        <div class="mb-2">
-                                            <v-icon size="small" class="mr-2">mdi-calendar</v-icon>
-                                            <span class="text-body-2">{{ formatDate(booking.event.event_date) }}</span>
-                                        </div>
-                                        <div class="mb-2">
-                                            <v-icon size="small" class="mr-2">mdi-map-marker</v-icon>
-                                            <span class="text-body-2">{{ booking.event.location }}</span>
-                                        </div>
-                                    </v-col>
-                                    <v-col cols="12" sm="6">
-                                        <div class="mb-2">
-                                            <v-icon size="small" class="mr-2">mdi-seat</v-icon>
-                                            <span class="text-body-2">{{ booking.seats_booked }} seat(s)</span>
-                                        </div>
-                                        <div class="mb-2"
-                                            v-if="booking.seat_details && booking.seat_details.length > 0">
-                                            <v-icon size="small" class="mr-2">mdi-format-list-numbered</v-icon>
-                                            <span class="text-body-2">
-                                                Seats:
-                                                <v-chip v-for="seat in booking.seat_details" :key="seat.id"
-                                                    size="x-small" class="ma-1" color="primary" variant="outlined">
-                                                    {{ seat.row_number }}-{{ seat.seat_number }}
-                                                </v-chip>
-                                            </span>
-                                        </div>
-                                        <div class="mb-2">
-                                            <v-icon size="small" class="mr-2">mdi-clock</v-icon>
-                                            <span class="text-body-2">Booked: {{ formatDate(booking.booking_date)
-                                                }}</span>
-                                        </div>
-                                    </v-col>
-                                </v-row>
-                            </v-card-text>
-                        </v-col>
-
-                        <v-col cols="12" md="4"
-                            class="d-flex flex-column justify-center align-center pa-4 bg-grey-lighten-4">
-                            <div class="text-h5 primary--text mb-2">${{ booking.total_price.toFixed(2) }}</div>
-                            <v-chip :color="booking.status === 'confirmed' ? 'success' : 'error'" class="mb-4">
-                                {{ booking.status.toUpperCase() }}
-                            </v-chip>
-
-                            <div v-if="booking.status === 'confirmed'" class="d-flex flex-column gap-2 w-100">
-                                <v-btn color="error" variant="outlined" size="small" @click="openCancelDialog(booking)"
-                                    block>
-                                    <v-icon start>mdi-cancel</v-icon>
-                                    Cancel All
-                                </v-btn>
-                                <v-btn v-if="booking.seat_details && booking.seat_details.length > 1" color="warning"
-                                    variant="outlined" size="small" @click="openPartialCancelDialog(booking)" block>
-                                    <v-icon start>mdi-seat-outline</v-icon>
-                                    Cancel Seats
-                                </v-btn>
-                            </div>
-                        </v-col>
-                    </v-row>
-                </v-card>
+                <BookingMyBookingCard :booking="booking" @cancel-booking="openCancelDialog"
+                    @partial-cancel="openPartialCancelDialog" />
             </v-col>
         </v-row>
 
-        <v-row v-else>
-            <v-col cols="12" class="text-center py-12">
-                <v-icon size="80" color="grey-lighten-1">mdi-ticket-outline</v-icon>
-                <p class="text-h6 text-grey mt-4">No bookings yet</p>
-                <p class="text-body-1 text-grey mb-4">Start by booking an event</p>
-                <v-btn color="primary" to="/">
-                    Browse Events
-                </v-btn>
-            </v-col>
-        </v-row>
+        <CommonEmptyState v-else icon="mdi-ticket-outline" title="No bookings yet" message="Start by booking an event"
+            action-text="Browse Events" action-to="/" action-icon="mdi-calendar-search" />
 
         <!-- Cancel Confirmation Dialog -->
         <v-dialog v-model="cancelDialog" max-width="500">
@@ -150,12 +87,8 @@
         </v-dialog>
 
         <!-- Snackbar -->
-        <v-snackbar v-model="snackbar" :color="snackbarColor" :timeout="3000">
-            {{ snackbarMessage }}
-            <template v-slot:actions>
-                <v-btn variant="text" @click="snackbar = false">Close</v-btn>
-            </template>
-        </v-snackbar>
+        <CommonNotificationSnackbar v-model="snackbar" :message="snackbarMessage" :color="snackbarColor"
+            :timeout="3000" />
     </v-container>
 </template>
 
@@ -175,12 +108,56 @@ const selectedSeatsToCancel = ref<number[]>([])
 const snackbar = ref(false)
 const snackbarMessage = ref('')
 const snackbarColor = ref('success')
+const error = ref('')
 
-const displayBookings = computed(() => bookings.value || [])
+// Search and filter state
+const searchQuery = ref('')
+const statusFilter = ref('')
+const statusOptions = [
+    { title: 'All Statuses', value: '' },
+    { title: 'Confirmed', value: 'confirmed' },
+    { title: 'Cancelled', value: 'cancelled' }
+]
+
+// Computed property for filtered and searched bookings
+const displayBookings = computed(() => {
+    let filtered = bookings.value || []
+
+    // Filter by status
+    if (statusFilter.value) {
+        filtered = filtered.filter(booking => booking.status === statusFilter.value)
+    }
+
+    // Filter by search query
+    if (searchQuery.value) {
+        const query = searchQuery.value.toLowerCase()
+        filtered = filtered.filter(booking =>
+            booking.event?.name?.toLowerCase().includes(query) ||
+            booking.event?.location?.toLowerCase().includes(query) ||
+            booking.status?.toLowerCase().includes(query)
+        )
+    }
+
+    return filtered
+})
 
 const loadBookings = async () => {
     loading.value = true
-    await fetchMyBookings()
+    error.value = ''
+    try {
+        const result = await fetchMyBookings()
+        if (!result.success) {
+            error.value = result.error
+            snackbarMessage.value = result.error
+            snackbarColor.value = 'error'
+            snackbar.value = true
+        }
+    } catch (err: any) {
+        error.value = 'Failed to load bookings'
+        snackbarMessage.value = 'Failed to load bookings'
+        snackbarColor.value = 'error'
+        snackbar.value = true
+    }
     loading.value = false
 }
 
@@ -241,15 +218,15 @@ const confirmPartialCancel = async () => {
     }
 }
 
-const formatDate = (dateString: string) => {
-    const date = new Date(dateString)
-    return date.toLocaleDateString('en-US', {
-        year: 'numeric',
-        month: 'long',
-        day: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit'
-    })
+// Search and filter handlers
+const handleSearch = () => {
+    // The computed property will automatically update when searchQuery changes
+    // No additional logic needed here for basic search
+}
+
+const handleFilter = () => {
+    // The computed property will automatically update when statusFilter changes
+    // No additional logic needed here for basic filtering
 }
 
 onMounted(() => {

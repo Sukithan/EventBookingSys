@@ -38,9 +38,20 @@ export const useBookings = () => {
             bookings.value = response as any[]
             return { success: true, data: response }
         } catch (error: any) {
+            console.error('Error fetching bookings:', error)
+            let errorMessage = 'Failed to fetch bookings'
+
+            if (error.status === 401) {
+                errorMessage = 'Authentication required. Please log in.'
+            } else if (error.data?.detail) {
+                errorMessage = error.data.detail
+            } else if (error.statusText) {
+                errorMessage = `${error.status}: ${error.statusText}`
+            }
+
             return {
                 success: false,
-                error: error.data?.detail || 'Failed to fetch bookings'
+                error: errorMessage
             }
         }
     }

@@ -157,8 +157,12 @@ async def get_my_bookings(
 ):
     """Get current user's bookings with seat details"""
     from models import SeatBooking, Seat
+    from sqlalchemy.orm import joinedload
     
-    bookings = db.query(Booking).filter(
+    # Use joinedload to eager load the event relationship
+    bookings = db.query(Booking).options(
+        joinedload(Booking.event)
+    ).filter(
         Booking.user_id == current_user.id
     ).order_by(Booking.booking_date.desc()).all()
     

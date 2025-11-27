@@ -13,8 +13,8 @@
                                         near you</p>
                                     <v-text-field v-model="searchQuery" label="Search events..."
                                         prepend-inner-icon="mdi-magnify" variant="outlined" bg-color="white"
-                                        hide-details @input="handleSearch" class="mx-auto"
-                                        style="max-width: 600px;"></v-text-field>
+                                        hide-details @input="handleSearch" @click:clear="clearSearch" clearable
+                                        class="mx-auto" style="max-width: 600px;"></v-text-field>
                                 </v-col>
                             </v-row>
                         </v-container>
@@ -33,66 +33,14 @@
                 </v-col>
             </v-row>
 
-            <v-row v-if="loading">
-                <v-col v-for="n in 6" :key="n" cols="12" sm="6" md="4">
-                    <v-skeleton-loader type="card"></v-skeleton-loader>
-                </v-col>
-            </v-row>
+            <LoadingSkeleton v-if="loading" type="card" :count="6" :cols="12" :sm="6" :md="4" />
 
-            <v-row v-else-if="displayEvents.length > 0">
-                <v-col v-for="event in displayEvents" :key="event.id" cols="12" sm="6" lg="4">
-                    <v-card hover @click="viewEvent(event.id)" class="h-100">
-                        <v-img :src="event.image_url || 'https://via.placeholder.com/400x250?text=Event'"
-                            :height="$vuetify.display.xs ? '150' : '200'" cover>
-                            <template v-slot:placeholder>
-                                <v-row class="fill-height ma-0" align="center" justify="center">
-                                    <v-progress-circular indeterminate color="primary"></v-progress-circular>
-                                </v-row>
-                            </template>
-                        </v-img>
+            <EventGrid v-if="displayEvents.length > 0" :events="displayEvents"
+                :image-height="$vuetify.display.xs ? '150' : '200'" @view-event="viewEvent" />
 
-                        <v-card-title class="text-h6">{{ event.name }}</v-card-title>
-
-                        <v-card-text>
-                            <div class="text-body-2 mb-2">
-                                <v-icon size="small" class="mr-1">mdi-calendar</v-icon>
-                                {{ formatDate(event.event_date) }}
-                            </div>
-                            <div class="text-body-2 mb-2">
-                                <v-icon size="small" class="mr-1">mdi-map-marker</v-icon>
-                                {{ event.location }}
-                            </div>
-                            <div class="text-body-2 mb-2">
-                                <v-icon size="small" class="mr-1">mdi-seat</v-icon>
-                                {{ event.available_seats }} / {{ event.total_seats }} seats available
-                            </div>
-                            <div class="text-h6 primary--text mt-2">
-                                ${{ event.price.toFixed(2) }}
-                            </div>
-                        </v-card-text>
-
-                        <v-card-actions>
-                            <v-chip :color="event.available_seats > 0 ? 'success' : 'error'" size="small"
-                                variant="flat">
-                                {{ event.available_seats > 0 ? 'Available' : 'Sold Out' }}
-                            </v-chip>
-                            <v-spacer></v-spacer>
-                            <v-btn color="primary" variant="text">
-                                View Details
-                                <v-icon end>mdi-arrow-right</v-icon>
-                            </v-btn>
-                        </v-card-actions>
-                    </v-card>
-                </v-col>
-            </v-row>
-
-            <v-row v-else>
-                <v-col cols="12" class="text-center py-12">
-                    <v-icon size="80" color="grey-lighten-1">mdi-calendar-blank</v-icon>
-                    <p class="text-h6 text-grey mt-4">No events found</p>
-                    <p class="text-body-1 text-grey">Check back later for upcoming events</p>
-                </v-col>
-            </v-row>
+            <EmptyState v-else icon="mdi-calendar-blank"
+                :title="searchQuery ? 'No matching events found' : 'No events found'"
+                :message="searchQuery ? `No events match '${searchQuery}'. Try a different search term.` : 'Check back later for upcoming events'" />
         </v-container>
     </v-container>
 </template>
@@ -111,9 +59,30 @@ const loadEvents = async () => {
     loading.value = false
 }
 
-const handleSearch = async () => {
+// Debounced search function
+let searchTimeout: NodeJS.Timeout | null = null
+const handleSearch = () => {
+    // Clear existing timeout
+    if (searchTimeout) {
+        clearTimeout(searchTimeout)
+    }
+
+    // Set new timeout for debounced search
+    searchTimeout = setTimeout(async () => {
+        loading.value = true
+        if (searchQuery.value.trim()) {
+            await fetchEvents(searchQuery.value.trim())
+        } else {
+            await fetchUpcomingEvents()
+        }
+        loading.value = false
+    }, 500) // 500ms debounce
+}
+
+const clearSearch = async () => {
+    searchQuery.value = ''
     loading.value = true
-    await fetchEvents(searchQuery.value)
+    await fetchUpcomingEvents()
     loading.value = false
 }
 
@@ -128,16 +97,7 @@ const viewEvent = (id: number) => {
     }
 }
 
-const formatDate = (dateString: string) => {
-    const date = new Date(dateString)
-    return date.toLocaleDateString('en-US', {
-        year: 'numeric',
-        month: 'long',
-        day: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit'
-    })
-}
+
 
 onMounted(() => {
     loadEvents()

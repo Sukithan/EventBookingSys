@@ -65,7 +65,7 @@ async def get_all_bookings(
     skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=500),
     event_id: Optional[int] = None,
-    search: Optional[str] = Query(None, description="Search by user name, email, username, or booking ID"),
+    search: Optional[str] = Query(None, description="Search by user name, email, username, booking ID, or event location"),
     status: Optional[str] = Query(None, description="Filter by booking status (confirmed, cancelled)"),
     current_user: User = Depends(get_current_admin_user),
     db: Session = Depends(get_db)
@@ -73,7 +73,7 @@ async def get_all_bookings(
     """Get all bookings with user details and seat information (Admin only)"""
     from schemas import SeatBookingResponse
     
-    query = db.query(Booking).join(User)
+    query = db.query(Booking).join(User).join(Event)
     
     if event_id:
         query = query.filter(Booking.event_id == event_id)
@@ -87,7 +87,9 @@ async def get_all_bookings(
             (User.full_name.ilike(search_term)) |
             (User.email.ilike(search_term)) |
             (User.username.ilike(search_term)) |
-            (Booking.id.cast(String).ilike(search_term))
+            (Booking.id.cast(String).ilike(search_term)) |
+            (Event.location.ilike(search_term)) |
+            (Event.name.ilike(search_term))
         )
     
     bookings = query.order_by(Booking.booking_date.desc()).offset(skip).limit(limit).all()
