@@ -66,8 +66,17 @@ export const useAdmin = () => {
 
     const getEventSeatsAdmin = async (eventId: number) => {
         try {
-            const response = await $api(`/api/admin/seats/event/${eventId}`)
-            return { success: true, data: response }
+            const response: any = await $api(`/api/admin/seats/event/${eventId}`)
+            // Transform the response to match frontend expectations
+            const seats = response.seats.map((seat: any) => ({
+                id: seat.id,
+                row_number: seat.row_number,
+                seat_number: seat.seat_number,
+                is_available: !seat.is_booked,
+                is_locked: false, // Admin can see all seats
+                booking_info: seat.booking_info
+            }))
+            return { success: true, data: seats }
         } catch (error: any) {
             return {
                 success: false,

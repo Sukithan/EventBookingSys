@@ -113,8 +113,15 @@ const handleSearch = async () => {
   loading.value = false
 }
 
+const { isAdmin } = useAuth()
+
 const viewEvent = (id: number) => {
-  router.push(`/events/${id}`)
+  // Redirect admin to admin bookings page
+  if (isAdmin.value) {
+    router.push(`/admin/events/${id}/bookings`)
+  } else {
+    router.push(`/events/${id}`)
+  }
 }
 
 const formatDate = (dateString: string) => {

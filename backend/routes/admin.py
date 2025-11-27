@@ -169,6 +169,115 @@ async def get_booking_details(
     
     return booking
 
+@router.post("/bookings")
+async def create_booking_admin(
+    booking_data: dict,
+    current_user: User = Depends(get_current_admin_user),
+    db: Session = Depends(get_db)
+):
+    """Create a booking on behalf of a user (Admin only) - if no username provided, books for admin themselves"""
+    event_id = booking_data.get('event_id')
+    seat_ids = booking_data.get('seat_ids', [])
+    username_or_email = booking_data.get('username_or_email')
+    
+    if not event_id or not seat_ids:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Missing required fields: event_id, seat_ids"
+        )
+    
+    # If no username provided, use current admin user
+    if not username_or_email or not username_or_email.strip():
+        user = current_user
+    else:
+        # Find user by username or email
+        user = db.query(User).filter(
+            (User.username == username_or_email) | (User.email == username_or_email)
+        ).first()
+        
+        if not user:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"User not found with username or email: {username_or_email}"
+            )
+    
+    # Verify event exists
+    event = db.query(Event).filter(Event.id == event_id).first()
+    if not event:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Event not found"
+        )
+    
+    # Check if seats are available
+    seats = db.query(Seat).filter(
+        Seat.id.in_(seat_ids),
+        Seat.event_id == event_id
+    ).all()
+    
+    if len(seats) != len(seat_ids):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Some seats not found"
+        )
+    
+    # Check if seats are available (not booked)
+    for seat in seats:
+        existing_booking = db.query(SeatBooking).join(Booking).filter(
+            SeatBooking.seat_id == seat.id,
+            Booking.status == "confirmed"
+        ).first()
+        
+        if existing_booking:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Seat {seat.row_number}-{seat.seat_number} is already booked"
+            )
+    
+    # Calculate total price
+    total_price = event.price * len(seat_ids)
+    
+    # Create booking
+    booking = Booking(
+        user_id=user.id,
+        event_id=event_id,
+        seats_booked=len(seat_ids),
+        total_price=total_price,
+        status="confirmed"
+    )
+    db.add(booking)
+    db.flush()
+    
+    # Create seat bookings
+    for seat_id in seat_ids:
+        seat_booking = SeatBooking(
+            booking_id=booking.id,
+            seat_id=seat_id
+        )
+        db.add(seat_booking)
+        
+        # Update seat availability
+        db.query(Seat).filter(Seat.id == seat_id).update({"is_available": False})
+    
+    # Update event available seats
+    db.query(Event).filter(Event.id == event_id).update({
+        Event.available_seats: Event.available_seats - len(seat_ids)
+    })
+    
+    db.commit()
+    db.refresh(booking)
+    
+    return {
+        "id": booking.id,
+        "user_id": booking.user_id,
+        "event_id": booking.event_id,
+        "seats_booked": booking.seats_booked,
+        "total_price": float(booking.total_price),
+        "status": booking.status,
+        "booking_date": booking.booking_date.isoformat() if booking.booking_date else None,
+        "message": f"Booking created successfully for user {user.username}"
+    }
+
 @router.delete("/bookings/{booking_id}", response_model=MessageResponse)
 async def cancel_booking_admin(
     booking_id: int,

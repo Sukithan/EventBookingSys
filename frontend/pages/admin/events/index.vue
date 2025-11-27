@@ -42,10 +42,8 @@
                             </template>
 
                             <template v-slot:item.actions="{ item }">
-                                <v-btn icon="mdi-information" size="small" variant="text" @click="viewDetails(item.id)"
-                                    title="View Details"></v-btn>
-                                <v-btn icon="mdi-ticket" size="small" variant="text" @click="viewBookings(item.id)"
-                                    title="View Bookings"></v-btn>
+                                <v-btn icon="mdi-ticket" size="small" variant="text" color="primary"
+                                    @click="viewBookings(item.id)" title="View Details & Bookings"></v-btn>
                                 <v-btn icon="mdi-pencil" size="small" variant="text" @click="editEvent(item.id)"
                                     title="Edit"></v-btn>
                                 <v-btn icon="mdi-delete" size="small" variant="text" color="error"
@@ -123,10 +121,6 @@ const loadEvents = async () => {
         events.value = result.data as any[]
     }
     loading.value = false
-}
-
-const viewDetails = (id: number) => {
-    router.push(`/events/${id}`)
 }
 
 const viewBookings = (id: number) => {
