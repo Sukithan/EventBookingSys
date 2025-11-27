@@ -4,6 +4,9 @@
             <v-icon :size="iconSize" :color="color">{{ icon }}</v-icon>
             <div :class="valueClass">{{ value }}</div>
             <div :class="labelClass">{{ label }}</div>
+            <div v-if="$slots.subtitle" class="text-caption text-grey mt-1">
+                <slot name="subtitle"></slot>
+            </div>
         </v-card-text>
     </v-card>
 </template>

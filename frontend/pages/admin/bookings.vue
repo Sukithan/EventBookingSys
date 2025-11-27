@@ -1,6 +1,7 @@
 <template>
     <v-container>
-        <PageHeader title="All Bookings" />
+        <PageHeader title="Booking History"
+            subtitle="Complete history of all bookings across all events - including cancelled bookings by users and admins" />
 
         <!-- Booking Stats -->
         <BookingStats :bookings="bookings" :loading="loading" />
@@ -9,7 +10,7 @@
         <v-card class="mb-4 pa-4">
             <SearchAndFilter v-model:search-query="searchQuery" v-model:status-filter="statusFilter"
                 :status-options="statusOptions" :loading="loading" search-label="Search bookings..."
-                search-placeholder="Search by name, email, username, booking ID, event name or location"
+                search-placeholder="Search by user name, email, username, booking ID, event name or location"
                 @refresh="loadBookings" @clear-search="clearSearch">
                 <template #additional-actions>
                     <v-btn v-if="bookings.length > 0" color="success" variant="outlined" class="ml-2"
@@ -30,8 +31,8 @@
             </v-col>
         </v-row>
 
-        <EmptyState v-else icon="mdi-ticket-outline" title="No bookings yet"
-            message="Bookings will appear here once users start making reservations" />
+        <EmptyState v-else icon="mdi-history" title="No bookings found"
+            message="No bookings match your current search or filter criteria" />
 
         <!-- Cancellation Confirmation Dialog -->
         <ConfirmationDialog v-model="cancelDialog" title="Cancel Booking"
@@ -41,7 +42,7 @@
 
         <!-- Booking Details Dialog -->
         <BookingDetailsDialog v-model="detailsDialog" :booking="selectedBooking" :cancelling-booking="cancellingBooking"
-            @cancel-booking="confirmCancelBooking" />
+            @cancel-booking="confirmCancelBooking" @seat-deleted="loadBookings" />
 
         <!-- Success/Error Snackbar -->
         <NotificationSnackbar v-model="snackbar" :message="snackbarMessage" :color="snackbarColor" />
@@ -72,9 +73,9 @@ const statusFilter = ref('')
 const searchTimeout = ref<NodeJS.Timeout | null>(null)
 
 const statusOptions = [
-    { title: 'All Status', value: '' },
-    { title: 'Confirmed', value: 'confirmed' },
-    { title: 'Cancelled', value: 'cancelled' }
+    { title: 'All Bookings (History)', value: '' },
+    { title: 'Active Only', value: 'confirmed' },
+    { title: 'Cancelled Only', value: 'cancelled' }
 ]
 
 const cancelDialogDetails = computed(() => {
@@ -126,12 +127,42 @@ const loadBookings = async () => {
 
 const confirmCancelBooking = (booking: any) => {
     console.log('=== Confirm cancel booking called ===')
-    console.log('Booking data:', booking)
+    console.log('Booking data:', JSON.stringify(booking, null, 2))
     console.log('Booking ID:', booking?.id)
-    selectedBooking.value = booking
+    console.log('Booking status:', booking?.status)
+
+    if (!booking) {
+        console.error('No booking object provided')
+        snackbarMessage.value = 'Invalid booking data - no booking object'
+        snackbarColor.value = 'error'
+        snackbar.value = true
+        return
+    }
+
+    if (!booking.id) {
+        console.error('Invalid booking object - missing ID:', booking)
+        snackbarMessage.value = 'Invalid booking data - missing ID'
+        snackbarColor.value = 'error'
+        snackbar.value = true
+        return
+    }
+
+    if (booking.status === 'cancelled') {
+        console.log('Booking is already cancelled')
+        snackbarMessage.value = 'This booking is already cancelled'
+        snackbarColor.value = 'info'
+        snackbar.value = true
+        return
+    }
+
+    selectedBooking.value = { ...booking }
     console.log('Selected booking set:', selectedBooking.value)
-    cancelDialog.value = true
-    console.log('Cancel dialog value:', cancelDialog.value)
+
+    // Use nextTick to ensure Vue has updated before opening dialog
+    nextTick(() => {
+        cancelDialog.value = true
+        console.log('Cancel dialog opened:', cancelDialog.value)
+    })
 }
 
 const viewBookingDetails = (booking: any) => {
@@ -140,22 +171,31 @@ const viewBookingDetails = (booking: any) => {
 }
 
 const cancelBooking = async () => {
-    if (!selectedBooking.value) {
-        console.log('No booking selected')
+    console.log('=== cancelBooking function called ===')
+    console.log('cancelDialog value:', cancelDialog.value)
+    console.log('Selected booking:', selectedBooking.value)
+
+    if (!selectedBooking.value || !selectedBooking.value.id) {
+        console.error('No booking selected or invalid booking')
+        snackbarMessage.value = 'No booking selected'
+        snackbarColor.value = 'error'
+        snackbar.value = true
+        cancelDialog.value = false
         return
     }
 
-    console.log('Cancelling booking:', selectedBooking.value.id)
-    cancellingBooking.value = selectedBooking.value.id
+    const bookingId = selectedBooking.value.id
+    console.log('Cancelling booking ID:', bookingId)
+    cancellingBooking.value = bookingId
 
     try {
-        console.log('Making DELETE request to:', `/api/admin/bookings/${selectedBooking.value.id}`)
-        const response = await $api(`/api/admin/bookings/${selectedBooking.value.id}`, {
+        console.log('Making DELETE request to:', `/api/admin/bookings/${bookingId}`)
+        const response = await $api(`/api/admin/bookings/${bookingId}`, {
             method: 'DELETE'
         })
 
         console.log('Booking cancelled successfully:', response)
-        snackbarMessage.value = `Booking #${selectedBooking.value.id} cancelled successfully`
+        snackbarMessage.value = `Booking #${bookingId} cancelled successfully`
         snackbarColor.value = 'success'
         snackbar.value = true
 
@@ -163,8 +203,10 @@ const cancelBooking = async () => {
         cancelDialog.value = false
         detailsDialog.value = false
 
-        // Refresh bookings list
+        // Refresh bookings list to show updated status
+        console.log('Reloading bookings...')
         await loadBookings()
+        console.log('Bookings reloaded')
 
     } catch (error: any) {
         console.error('Error cancelling booking:', error)
@@ -172,12 +214,11 @@ const cancelBooking = async () => {
         snackbarMessage.value = error.data?.detail || error.message || 'Failed to cancel booking'
         snackbarColor.value = 'error'
         snackbar.value = true
-
-        // Close dialog even on error
-        cancelDialog.value = false
     } finally {
+        // Always close dialog and clear loading state
+        cancelDialog.value = false
         cancellingBooking.value = null
-        console.log('Cancel operation completed')
+        console.log('Cancel operation completed, dialog closed')
     }
 }
 

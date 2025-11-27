@@ -63,7 +63,10 @@ const show = computed({
 })
 
 const confirm = () => {
+    console.log('=== ConfirmationDialog: Confirm button clicked ===')
+    console.log('Emitting confirm event')
     emit('confirm')
+    console.log('Confirm event emitted')
     // Don't close the dialog here - let the parent handle it after the async operation completes
 }
 

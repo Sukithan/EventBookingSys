@@ -131,6 +131,7 @@ class BookingWithDetails(BookingResponse):
 
 class BookingWithUser(BookingResponse):
     user: UserResponse
+    event: Optional[EventResponse] = None
     seat_details: Optional[List[SeatBookingResponse]] = []
     
     class Config:
