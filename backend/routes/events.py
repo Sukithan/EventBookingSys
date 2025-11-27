@@ -5,11 +5,57 @@ from typing import List, Optional
 from datetime import datetime, timezone
 
 from database import get_db
-from models import Event, User, Booking
+from models import Event, User, Booking, Seat, SeatBooking, SeatLock
 from schemas import EventCreate, EventUpdate, EventResponse, MessageResponse
 from dependencies import get_current_admin_user
 
 router = APIRouter(prefix="/api/events", tags=["Events"])
+
+def regenerate_event_seats(event: Event, new_rows: int, new_seats_per_row: int, db: Session):
+    """Regenerate seats for an event when layout changes"""
+    
+    # Get all currently booked seats
+    booked_seats = db.query(Seat).join(SeatBooking).filter(
+        Seat.event_id == event.id
+    ).all()
+    
+    # Create a set of booked seat positions
+    booked_positions = {(getattr(seat, 'row_number', 0), getattr(seat, 'seat_number', 0)) for seat in booked_seats}
+    
+    # Delete all seat locks for this event (they'll need to reselect)
+    db.query(SeatLock).filter(SeatLock.event_id == event.id).delete()
+    
+    # Get all existing seats
+    existing_seats = db.query(Seat).filter(Seat.event_id == event.id).all()
+    existing_positions = {(getattr(seat, 'row_number', 0), getattr(seat, 'seat_number', 0)): seat for seat in existing_seats}
+    
+    # Delete seats that are outside the new configuration and not booked
+    for seat in existing_seats:
+        row_num = getattr(seat, 'row_number', 0)
+        seat_num = getattr(seat, 'seat_number', 0)
+        position = (row_num, seat_num)
+        # If seat is outside new layout
+        if row_num > new_rows or seat_num > new_seats_per_row:
+            # Only delete if not booked
+            if position not in booked_positions:
+                db.delete(seat)
+    
+    # Create new seats for the updated layout
+    for row in range(1, new_rows + 1):
+        for seat_num in range(1, new_seats_per_row + 1):
+            position = (row, seat_num)
+            
+            # Skip if seat already exists
+            if position not in existing_positions:
+                seat = Seat(
+                    event_id=event.id,
+                    row_number=row,
+                    seat_number=seat_num,
+                    is_available=True
+                )
+                db.add(seat)
+    
+    db.commit()
 
 @router.get("", response_model=List[EventResponse])
 async def get_events(
@@ -102,10 +148,19 @@ async def create_event(
         calculated_total_seats = event_data.rows * event_data.seats_per_row
         event_dict['total_seats'] = calculated_total_seats
         
+        # Determine created_by safely without relying on truthiness of SQLAlchemy objects
+        created_by = None
+        try:
+            uid = int(getattr(current_user, 'id', 0))
+            if uid != 0:
+                created_by = uid
+        except Exception:
+            created_by = None
+
         db_event = Event(
             **event_dict,
             available_seats=calculated_total_seats,
-            created_by=current_user.id if hasattr(current_user, 'id') and current_user.id != 0 else None
+            created_by=created_by
         )
         
         db.add(db_event)
@@ -153,8 +208,39 @@ async def update_event(
             )
         update_data['event_date'] = event_date
     
-    # Handle total_seats update
-    if 'total_seats' in update_data and update_data['total_seats'] is not None:
+    # Auto-calculate total_seats if rows or seats_per_row are updated
+    rows_updated = 'rows' in update_data and update_data['rows'] is not None
+    seats_per_row_updated = 'seats_per_row' in update_data and update_data['seats_per_row'] is not None
+    
+    if rows_updated or seats_per_row_updated:
+        # Get current or new values
+        new_rows = update_data.get('rows', event.rows)
+        new_seats_per_row = update_data.get('seats_per_row', event.seats_per_row)
+        
+        # Calculate new total seats
+        new_total_seats = new_rows * new_seats_per_row
+        
+        # Calculate the difference in seats
+        old_total = event.total_seats
+        seats_diff = new_total_seats - old_total
+        
+        # Update available seats accordingly
+        new_available = event.available_seats + seats_diff
+        if new_available < 0:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Cannot reduce total seats below already booked seats"
+            )
+        
+        # Set the calculated total_seats and available_seats
+        update_data['total_seats'] = new_total_seats
+        update_data['available_seats'] = new_available
+        
+        # Regenerate the seat layout to match the new configuration
+        regenerate_event_seats(event, new_rows, new_seats_per_row, db)
+    
+    # Handle manual total_seats update (if rows/seats_per_row not provided)
+    elif 'total_seats' in update_data and update_data['total_seats'] is not None:
         # Calculate the difference in seats
         old_total = event.total_seats
         new_total = update_data['total_seats']
@@ -194,13 +280,15 @@ async def update_event_image(
     
     # Validate image URL if provided
     image_url = image_data.get('image_url')
-    if image_url and not image_url.startswith(('http://', 'https://')):
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Image URL must be a valid HTTP/HTTPS URL"
-        )
+    if image_url is not None:
+        if image_url and not image_url.startswith(('http://', 'https://')):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Image URL must be a valid HTTP/HTTPS URL"
+            )
+        # Only assign when not None to avoid assigning None to a non-nullable Column[str]
+        event.image_url = image_url
     
-    event.image_url = image_url
     db.commit()
     db.refresh(event)
     
@@ -265,7 +353,8 @@ async def delete_event(
     
     if booking_count > 0:
         # Soft delete by marking as inactive if there are bookings
-        event.is_active = False
+        # use setattr to avoid static type checker issues with SQLAlchemy Column descriptors
+        setattr(event, "is_active", False)
         db.commit()
         return MessageResponse(message="Event deactivated successfully (had existing bookings)", success=True)
     else:

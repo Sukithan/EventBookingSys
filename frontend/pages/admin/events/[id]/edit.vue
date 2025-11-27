@@ -54,13 +54,14 @@
                                 </v-col>
 
                                 <v-col cols="12" sm="6">
-                                    <v-text-field v-model="eventData.rows" label="Number of Rows" type="number" min="1"
-                                        :rules="[rules.required]" variant="outlined"></v-text-field>
+                                    <v-text-field v-model.number="eventData.rows" label="Number of Rows" type="number"
+                                        min="1" :rules="[rules.required]" variant="outlined"></v-text-field>
                                 </v-col>
 
                                 <v-col cols="12" sm="6">
-                                    <v-text-field v-model="eventData.seats_per_row" label="Seats per Row" type="number"
-                                        min="1" :rules="[rules.required]" variant="outlined"></v-text-field>
+                                    <v-text-field v-model.number="eventData.seats_per_row" label="Seats per Row"
+                                        type="number" min="1" :rules="[rules.required]"
+                                        variant="outlined"></v-text-field>
                                 </v-col>
 
                                 <v-col cols="12">
@@ -100,27 +101,30 @@
                 <v-card>
                     <v-card-title>Event Statistics</v-card-title>
                     <v-card-text>
+                        <div class="mb-3" v-if="calculatedTotalSeats !== event.total_seats">
+                            <div class="text-caption text-grey">Total Seats </div>
+                            <div class="text-h6 text-warning">{{ calculatedTotalSeats }}</div>
+                        </div>
+                        <v-divider class="my-3"></v-divider>
                         <v-row>
                             <v-col cols="6">
                                 <div class="text-center">
-                                    <div class="text-h4 text-primary">{{ event.total_seats - event.available_seats }}
+                                    <div class="text-h4 text-primary">{{ bookedSeats }}
                                     </div>
                                     <div class="text-caption">Booked</div>
                                 </div>
                             </v-col>
                             <v-col cols="6">
                                 <div class="text-center">
-                                    <div class="text-h4 text-success">{{ event.available_seats }}</div>
-                                    <div class="text-caption">Available</div>
+                                    <div class="text-h4 text-success">{{ calculatedAvailableSeats }}</div>
+                                    <div class="text-caption">Available (after save)</div>
                                 </div>
                             </v-col>
                         </v-row>
-                        <v-progress-linear
-                            :model-value="((event.total_seats - event.available_seats) / event.total_seats) * 100"
-                            color="primary" height="8" rounded class="mt-3"></v-progress-linear>
+                        <v-progress-linear :model-value="bookingPercentage" color="primary" height="8" rounded
+                            class="mt-3"></v-progress-linear>
                         <div class="text-center mt-2 text-caption">
-                            {{ Math.round(((event.total_seats - event.available_seats) / event.total_seats) * 100) }}%
-                            Full
+                            {{ Math.round(bookingPercentage) }}% Full
                         </div>
                     </v-card-text>
                 </v-card>
@@ -191,6 +195,26 @@ const eventData = reactive({
     rows: 10,
     seats_per_row: 10,
     is_active: true
+})
+
+const calculatedTotalSeats = computed(() => {
+    return (eventData.rows || 0) * (eventData.seats_per_row || 0)
+})
+
+const bookedSeats = computed(() => {
+    if (!event.value) return 0
+    return event.value.total_seats - event.value.available_seats
+})
+
+const calculatedAvailableSeats = computed(() => {
+    if (!event.value) return 0
+    const seatsDiff = calculatedTotalSeats.value - event.value.total_seats
+    return event.value.available_seats + seatsDiff
+})
+
+const bookingPercentage = computed(() => {
+    if (calculatedTotalSeats.value === 0) return 0
+    return (bookedSeats.value / calculatedTotalSeats.value) * 100
 })
 
 const rules = {

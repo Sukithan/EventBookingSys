@@ -162,7 +162,6 @@
 
                 <v-alert v-else-if="isAdmin && isAuthenticated" type="info" variant="tonal" class="mt-4">
                     <div class="d-flex align-center">
-                        <v-icon start>mdi-shield-crown</v-icon>
                         <div>
                             <div class="font-weight-bold">Admin Access</div>
                             <div class="text-body-2">You can make multiple bookings and manage seat reservations</div>
