@@ -161,6 +161,12 @@ class EventWithBookings(EventResponse):
 class PartialCancelRequest(BaseModel):
     seat_ids: List[int] = Field(..., min_length=1)
 
+# Admin Booking Schema
+class AdminBookingCreate(BaseModel):
+    event_id: int
+    seat_ids: List[int] = Field(..., min_length=1)
+    username_or_email: Optional[str] = None
+
 # Response Schemas
 class MessageResponse(BaseModel):
     message: str

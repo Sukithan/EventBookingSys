@@ -31,22 +31,6 @@ async def get_current_user(
             detail="Could not validate credentials",
             headers={"WWW-Authenticate": "Bearer"},
         )
-    # Handle admin user from environment variables
-    if username == settings.ADMIN_USERNAME and payload.get("is_admin") is True:
-        # Create a virtual admin user object
-        from datetime import datetime
-        class AdminUser:
-            id = 0
-            email = "admin@system.com"
-            username = settings.ADMIN_USERNAME
-            full_name = "System Administrator"
-            is_admin = True
-            is_active = True
-            hashed_password = ""
-            created_at = datetime.utcnow()
-            updated_at = None
-        
-        return cast(User, AdminUser())
     
     user = db.query(User).filter(User.username == username).first()
     if user is None:
@@ -105,23 +89,6 @@ async def get_current_user_optional(
         if username is None:
             return None
             
-        # Handle admin user from environment variables
-        if username == settings.ADMIN_USERNAME and payload.get("is_admin") is True:
-            # Create a virtual admin user object
-            from datetime import datetime
-            class AdminUser:
-                id = 0
-                email = "admin@system.com"
-                username = settings.ADMIN_USERNAME
-                full_name = "System Administrator"
-                is_admin = True
-                is_active = True
-                hashed_password = ""
-                created_at = datetime.utcnow()
-                updated_at = None
-            
-            return cast(User, AdminUser())
-        
         user = db.query(User).filter(User.username == username).first()
         if user is None or not getattr(user, "is_active", True):
             return None
@@ -152,23 +119,6 @@ async def get_current_user_for_any_route(
             detail="Could not validate credentials",
             headers={"WWW-Authenticate": "Bearer"},
         )
-    
-    # Handle admin user from environment variables
-    if username == settings.ADMIN_USERNAME and payload.get("is_admin") is True:
-        # Create a virtual admin user object
-        from datetime import datetime
-        class AdminUser:
-            id = 0
-            email = "admin@system.com"
-            username = settings.ADMIN_USERNAME
-            full_name = "System Administrator"
-            is_admin = True
-            is_active = True
-            hashed_password = ""
-            created_at = datetime.utcnow()
-            updated_at = None
-        
-        return cast(User, AdminUser())
     
     user = db.query(User).filter(User.username == username).first()
     if user is None:

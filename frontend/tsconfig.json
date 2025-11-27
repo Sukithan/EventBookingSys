@@ -4,5 +4,5 @@
     "strict": false,
     "types": ["@types/node"]
   },
-  "exclude": ["pages/debug-auth.vue"]
+  "exclude": ["pages/debug-auth.vue", "pages/admin/register.vue"]
 }

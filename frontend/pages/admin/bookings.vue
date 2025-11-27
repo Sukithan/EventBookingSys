@@ -6,6 +6,69 @@
             </v-col>
         </v-row>
 
+        <!-- Booking Stats -->
+        <v-row class="mb-4" v-if="!loading && bookings.length > 0">
+            <v-col cols="12" md="4">
+                <v-card variant="outlined" color="success">
+                    <v-card-text class="text-center">
+                        <v-icon size="30" color="success">mdi-check-circle</v-icon>
+                        <div class="text-h6 font-weight-bold">{{ confirmedCount }}</div>
+                        <div class="text-caption">Confirmed Bookings</div>
+                    </v-card-text>
+                </v-card>
+            </v-col>
+            <v-col cols="12" md="4">
+                <v-card variant="outlined" color="error">
+                    <v-card-text class="text-center">
+                        <v-icon size="30" color="error">mdi-cancel</v-icon>
+                        <div class="text-h6 font-weight-bold">{{ cancelledCount }}</div>
+                        <div class="text-caption">Cancelled Bookings</div>
+                    </v-card-text>
+                </v-card>
+            </v-col>
+            <v-col cols="12" md="4">
+                <v-card variant="outlined" color="primary">
+                    <v-card-text class="text-center">
+                        <v-icon size="30" color="primary">mdi-ticket-outline</v-icon>
+                        <div class="text-h6 font-weight-bold">{{ bookings.length }}</div>
+                        <div class="text-caption">Total Bookings</div>
+                    </v-card-text>
+                </v-card>
+            </v-col>
+        </v-row>
+
+        <!-- Search and Filters -->
+        <v-row class="mb-4">
+            <v-col cols="12" md="6">
+                <v-text-field
+                    v-model="searchQuery"
+                    label="Search bookings..."
+                    placeholder="Search by user name, email, username, or booking ID"
+                    prepend-inner-icon="mdi-magnify"
+                    clearable
+                    variant="outlined"
+                    @input="debouncedSearch"
+                    @click:clear="clearSearch"
+                />
+            </v-col>
+            <v-col cols="12" md="3">
+                <v-select
+                    v-model="statusFilter"
+                    label="Status Filter"
+                    :items="statusOptions"
+                    variant="outlined"
+                    clearable
+                    @update:modelValue="filterBookings"
+                />
+            </v-col>
+            <v-col cols="12" md="3" class="d-flex align-center">
+                <v-btn color="primary" @click="loadBookings" :loading="loading">
+                    <v-icon start>mdi-refresh</v-icon>
+                    Refresh
+                </v-btn>
+            </v-col>
+        </v-row>
+
         <v-row v-if="loading">
             <v-col cols="12">
                 <v-skeleton-loader type="table"></v-skeleton-loader>
@@ -16,7 +79,13 @@
             <v-col cols="12">
                 <v-card>
                     <v-card-text>
-                        <v-data-table :headers="headers" :items="bookings" :items-per-page="10" class="elevation-0">
+                        <v-data-table 
+                            :headers="headers" 
+                            :items="bookings" 
+                            :items-per-page="10" 
+                            class="elevation-0"
+                            :row-class="getRowClass"
+                        >
                             <template v-slot:item.booking_date="{ item }">
                                 {{ formatDate(item.booking_date) }}
                             </template>
@@ -35,7 +104,7 @@
                             </template>
 
                             <template v-slot:item.status="{ item }">
-                                <v-chip :color="item.status === 'confirmed' ? 'success' : 'error'" size="small">
+                                <v-chip :color="getStatusColor(item.status)" size="small">
                                     {{ item.status.toUpperCase() }}
                                 </v-chip>
                             </template>
@@ -46,6 +115,10 @@
                                         variant="outlined" :loading="cancellingBooking === item.id"
                                         @click="confirmCancelBooking(item)">
                                         Cancel
+                                    </v-btn>
+                                    <v-btn v-else-if="item.status === 'cancelled'" color="grey" size="small"
+                                        variant="outlined" disabled>
+                                        Cancelled
                                     </v-btn>
                                     <v-btn color="info" size="small" variant="outlined"
                                         @click="viewBookingDetails(item)">
@@ -125,8 +198,7 @@
                             <div class="mb-2"><strong>Total Price:</strong> ${{ selectedBooking.total_price?.toFixed(2)
                             }}</div>
                             <div class="mb-2"><strong>Status:</strong>
-                                <v-chip :color="selectedBooking.status === 'confirmed' ? 'success' : 'error'"
-                                    size="small">
+                                <v-chip :color="getStatusColor(selectedBooking.status)" size="small">
                                     {{ selectedBooking.status?.toUpperCase() }}
                                 </v-chip>
                             </div>
@@ -142,6 +214,9 @@
                         @click="confirmCancelBooking(selectedBooking)">
                         Cancel This Booking
                     </v-btn>
+                    <v-chip v-else-if="selectedBooking.status === 'cancelled'" color="error" size="small">
+                        Booking Cancelled
+                    </v-chip>
                     <v-btn variant="text" @click="detailsDialog = false">Close</v-btn>
                 </v-card-actions>
             </v-card>
@@ -175,6 +250,17 @@ const snackbar = ref(false)
 const snackbarMessage = ref('')
 const snackbarColor = ref('success')
 
+// Search and filter state
+const searchQuery = ref('')
+const statusFilter = ref('')
+const searchTimeout = ref<NodeJS.Timeout | null>(null)
+
+const statusOptions = [
+    { title: 'All Status', value: '' },
+    { title: 'Confirmed', value: 'confirmed' },
+    { title: 'Cancelled', value: 'cancelled' }
+]
+
 const headers = [
     { title: 'Booking ID', value: 'id', key: 'id' },
     { title: 'User', value: 'user', key: 'user' },
@@ -188,11 +274,40 @@ const headers = [
 
 const loadBookings = async () => {
     loading.value = true
-    const result = await fetchAllBookings()
-    if (result.success) {
-        bookings.value = Array.isArray(result.data) ? (result.data as any[]) : []
+    console.log('Loading bookings with params:', {
+        search: searchQuery.value || undefined,
+        status: statusFilter.value || undefined,
+        limit: 200
+    })
+    
+    try {
+        const result = await fetchAllBookings({
+            search: searchQuery.value || undefined,
+            status: statusFilter.value || undefined,
+            limit: 200 // Increase limit to show more results
+        })
+        
+        console.log('Bookings API result:', result)
+        
+        if (result.success) {
+            bookings.value = Array.isArray(result.data) ? (result.data as any[]) : []
+            console.log('Successfully loaded bookings:', bookings.value.length)
+        } else {
+            console.error('Failed to load bookings:', result.error)
+            snackbarMessage.value = result.error || 'Failed to load bookings'
+            snackbarColor.value = 'error'
+            snackbar.value = true
+            bookings.value = []
+        }
+    } catch (error: any) {
+        console.error('Error loading bookings:', error)
+        snackbarMessage.value = error.message || 'Failed to load bookings'
+        snackbarColor.value = 'error'
+        snackbar.value = true
+        bookings.value = []
+    } finally {
+        loading.value = false
     }
-    loading.value = false
 }
 
 const confirmCancelBooking = (booking: any) => {
@@ -245,7 +360,78 @@ const formatDate = (dateString: string) => {
     })
 }
 
-onMounted(() => {
+const getStatusColor = (status: string) => {
+    switch (status) {
+        case 'confirmed':
+            return 'success'
+        case 'cancelled':
+            return 'error'
+        default:
+            return 'grey'
+    }
+}
+
+const debouncedSearch = () => {
+    if (searchTimeout.value) {
+        clearTimeout(searchTimeout.value)
+    }
+    searchTimeout.value = setTimeout(() => {
+        loadBookings()
+    }, 500)
+}
+
+const clearSearch = () => {
+    searchQuery.value = ''
+    loadBookings()
+}
+
+const filterBookings = () => {
+    loadBookings()
+}
+
+// Computed properties for statistics
+const confirmedCount = computed(() => {
+    return bookings.value.filter(booking => booking.status === 'confirmed').length
+})
+
+const cancelledCount = computed(() => {
+    return bookings.value.filter(booking => booking.status === 'cancelled').length
+})
+
+const getRowClass = (item: any) => {
+    return item.status === 'cancelled' ? 'cancelled-row' : ''
+}
+
+onMounted(async () => {
+    console.log('Admin bookings page mounted')
+    
+    // Check authentication status
+    const { isAuthenticated, isAdmin, user, initializeAuth } = useAuth()
+    await initializeAuth()
+    
+    console.log('Auth status:', {
+        isAuthenticated: isAuthenticated.value,
+        isAdmin: isAdmin.value,
+        user: user.value
+    })
+    
+    if (!isAuthenticated.value || !isAdmin.value) {
+        console.warn('User not authenticated or not admin, redirecting to login')
+        await navigateTo('/login')
+        return
+    }
+    
     loadBookings()
 })
 </script>
+
+<style scoped>
+:deep(.cancelled-row) {
+    opacity: 0.7;
+    background-color: rgba(244, 67, 54, 0.05) !important;
+}
+
+:deep(.cancelled-row:hover) {
+    background-color: rgba(244, 67, 54, 0.1) !important;
+}
+</style>

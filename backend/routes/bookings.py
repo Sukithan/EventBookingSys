@@ -116,13 +116,16 @@ async def create_booking(
     db.add(db_booking)
     db.flush()  # Get the booking ID
     
-    # Create seat bookings
+    # Create seat bookings and mark seats as unavailable
     for seat_id in booking_data.seat_ids:
         seat_booking = SeatBooking(
             booking_id=db_booking.id,
             seat_id=seat_id
         )
         db.add(seat_booking)
+        
+        # Mark seat as unavailable
+        db.query(Seat).filter(Seat.id == seat_id).update({"is_available": False})
     
     # Remove seat locks for these seats (for current user or all if admin)
     if is_admin:
@@ -229,6 +232,8 @@ async def cancel_booking(
     db: Session = Depends(get_db)
 ):
     """Cancel a booking"""
+    from models import SeatBooking, Seat
+    
     booking = db.query(Booking).filter(
         Booking.id == booking_id,
         Booking.user_id == current_user.id
@@ -246,15 +251,17 @@ async def cancel_booking(
             detail="Booking is already cancelled"
         )
     
-    # Get event
-    event = db.query(Event).filter(Event.id == booking.event_id).first()
+    # Get all seat bookings for this booking and mark seats as available
+    seat_bookings = db.query(SeatBooking).filter(SeatBooking.booking_id == booking_id).all()
+    for seat_booking in seat_bookings:
+        # Mark seat as available again
+        db.query(Seat).filter(Seat.id == seat_booking.seat_id).update({"is_available": True})
     
     # Restore seats (perform UPDATE to avoid direct assignment on ColumnElement)
     db.query(Event).filter(Event.id == booking.event_id).update(
         {Event.available_seats: Event.available_seats + booking.seats_booked}
     )
     
-    # Update booking status
     # Update booking status using update query
     db.query(Booking).filter(Booking.id == booking_id).update({"status": "cancelled"})
     
@@ -307,6 +314,10 @@ async def cancel_partial_seats(
         SeatBooking.booking_id == booking_id
     ).count()
     
+    # Mark seats as available again
+    for seat_id in cancel_request.seat_ids:
+        db.query(Seat).filter(Seat.id == seat_id).update({"is_available": True})
+    
     if len(cancel_request.seat_ids) >= total_seat_bookings:
         # If cancelling all seats, cancel the entire booking
         db.query(Booking).filter(Booking.id == booking_id).update({"status": "cancelled"})
@@ -322,7 +333,12 @@ async def cancel_partial_seats(
         # Update booking seats count and total price
         remaining_seats = total_seat_bookings - len(cancel_request.seat_ids)
         event = db.query(Event).filter(Event.id == booking.event_id).first()
-        new_total_price = event.price * remaining_seats
+        if not event:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Event associated with this booking not found"
+            )
+        new_total_price = getattr(event, "price", 0) * remaining_seats
         
         db.query(Booking).filter(Booking.id == booking_id).update({
             "seats_booked": remaining_seats,

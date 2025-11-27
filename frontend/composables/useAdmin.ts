@@ -25,15 +25,33 @@ export const useAdmin = () => {
         }
     }
 
-    const fetchAllBookings = async (eventId?: number) => {
+    const fetchAllBookings = async (params?: {
+        eventId?: number
+        search?: string
+        status?: string
+        skip?: number
+        limit?: number
+    }) => {
         try {
-            const params = eventId ? { event_id: eventId } : {}
-            const response = await $api('/api/admin/bookings', { params })
+            const queryParams: any = {}
+            if (params?.eventId) queryParams.event_id = params.eventId
+            if (params?.search) queryParams.search = params.search
+            if (params?.status) queryParams.status = params.status
+            if (params?.skip) queryParams.skip = params.skip
+            if (params?.limit) queryParams.limit = params.limit
+
+            console.log('Fetching bookings with params:', queryParams)
+
+            const response = await $api('/api/admin/bookings', { params: queryParams })
+
+            console.log('Bookings API response:', response)
+
             return { success: true, data: response }
         } catch (error: any) {
+            console.error('Bookings API error:', error)
             return {
                 success: false,
-                error: error.data?.detail || 'Failed to fetch bookings'
+                error: error.data?.detail || error.message || 'Failed to fetch bookings'
             }
         }
     }
@@ -72,8 +90,9 @@ export const useAdmin = () => {
                 id: seat.id,
                 row_number: seat.row_number,
                 seat_number: seat.seat_number,
-                is_available: !seat.is_booked,
-                is_locked: false, // Admin can see all seats
+                is_available: !seat.is_booked, // Convert is_booked to is_available
+                is_booked: seat.is_booked,
+                is_locked: false, // Admin can see all seats, no locks for admin
                 booking_info: seat.booking_info
             }))
             return { success: true, data: seats }
@@ -156,6 +175,25 @@ export const useAdmin = () => {
         }
     }
 
+    const createAdminBooking = async (eventId: number, seatIds: number[], usernameOrEmail?: string) => {
+        try {
+            const response = await $api('/api/admin/bookings', {
+                method: 'POST',
+                body: {
+                    event_id: eventId,
+                    seat_ids: seatIds,
+                    username_or_email: usernameOrEmail || ''
+                }
+            })
+            return { success: true, data: response }
+        } catch (error: any) {
+            return {
+                success: false,
+                error: error.data?.detail || 'Failed to create admin booking'
+            }
+        }
+    }
+
     return {
         fetchAllEvents,
         fetchEventBookings,
@@ -167,6 +205,7 @@ export const useAdmin = () => {
         deleteSeatBooking,
         updateEventImage,
         recalculateEventStats,
-        syncEventSeats
+        syncEventSeats,
+        createAdminBooking
     }
 }

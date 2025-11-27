@@ -1,11 +1,12 @@
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.orm import Session
+from sqlalchemy import String
 from typing import List, Optional
 from datetime import datetime
 
 from database import get_db
 from models import Booking, Event, User, Seat, SeatBooking
-from schemas import BookingWithUser, EventWithBookings, EventResponse, MessageResponse
+from schemas import BookingWithUser, EventWithBookings, EventResponse, MessageResponse, AdminBookingCreate
 from dependencies import get_current_admin_user
 
 router = APIRouter(prefix="/api/admin", tags=["Admin"])
@@ -13,7 +14,7 @@ router = APIRouter(prefix="/api/admin", tags=["Admin"])
 @router.get("/events", response_model=List[EventResponse])
 async def get_all_events(
     skip: int = Query(0, ge=0),
-    limit: int = Query(100, ge=1, le=100),
+    limit: int = Query(100, ge=1, le=500),
     current_user: User = Depends(get_current_admin_user),
     db: Session = Depends(get_db)
 ):
@@ -62,18 +63,32 @@ async def get_event_bookings(
 @router.get("/bookings", response_model=List[BookingWithUser])
 async def get_all_bookings(
     skip: int = Query(0, ge=0),
-    limit: int = Query(100, ge=1, le=100),
+    limit: int = Query(100, ge=1, le=500),
     event_id: Optional[int] = None,
+    search: Optional[str] = Query(None, description="Search by user name, email, username, or booking ID"),
+    status: Optional[str] = Query(None, description="Filter by booking status (confirmed, cancelled)"),
     current_user: User = Depends(get_current_admin_user),
     db: Session = Depends(get_db)
 ):
     """Get all bookings with user details and seat information (Admin only)"""
     from schemas import SeatBookingResponse
     
-    query = db.query(Booking)
+    query = db.query(Booking).join(User)
     
     if event_id:
         query = query.filter(Booking.event_id == event_id)
+    
+    if status:
+        query = query.filter(Booking.status == status)
+    
+    if search:
+        search_term = f"%{search}%"
+        query = query.filter(
+            (User.full_name.ilike(search_term)) |
+            (User.email.ilike(search_term)) |
+            (User.username.ilike(search_term)) |
+            (Booking.id.cast(String).ilike(search_term))
+        )
     
     bookings = query.order_by(Booking.booking_date.desc()).offset(skip).limit(limit).all()
     
@@ -189,6 +204,7 @@ async def create_booking_admin(
     # If no username provided, use current admin user
     if not username_or_email or not username_or_email.strip():
         user = current_user
+        print(f"DEBUG: Using current admin user: id={user.id}, username={user.username}")
     else:
         # Find user by username or email
         user = db.query(User).filter(
@@ -200,6 +216,7 @@ async def create_booking_admin(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail=f"User not found with username or email: {username_or_email}"
             )
+        print(f"DEBUG: Using found user: id={user.id}, username={user.username}")
     
     # Verify event exists
     event = db.query(Event).filter(Event.id == event_id).first()
@@ -298,6 +315,12 @@ async def cancel_booking_admin(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Booking is already cancelled"
         )
+    
+    # Get all seat bookings for this booking and mark seats as available
+    seat_bookings = db.query(SeatBooking).filter(SeatBooking.booking_id == booking_id).all()
+    for seat_booking in seat_bookings:
+        # Mark seat as available again
+        db.query(Seat).filter(Seat.id == seat_booking.seat_id).update({"is_available": True})
     
     # Restore seats to event
     db.query(Event).filter(Event.id == booking.event_id).update(
@@ -433,6 +456,9 @@ async def delete_seat_booking(
             "seats_booked": remaining_seats,
             "total_price": new_total_price
         })
+    
+    # Update seat to be available again
+    db.query(Seat).filter(Seat.id == seat_id).update({"is_available": True})
     
     # Restore seat availability to event
     db.query(Event).filter(Event.id == seat.event_id).update(

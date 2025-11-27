@@ -86,12 +86,12 @@ async def get_event_seats(
             is_available = True
         
         seat_responses.append(SeatResponse(
-            id=seat.id,
-            row_number=seat.row_number,
-            seat_number=seat.seat_number,
+            id=getattr(seat, "id"),
+            row_number=getattr(seat, "row_number"),
+            seat_number=getattr(seat, "seat_number"),
             is_available=is_available,
             is_locked=is_locked,
-            locked_by_current_user=locked_by_current_user
+            locked_by_current_user=bool(locked_by_current_user)
         ))
     
     return seat_responses
@@ -171,17 +171,17 @@ async def lock_seats(
     # Create new locks
     lock_responses = []
     for seat in seats:
-        if seat.id in lock_data.seat_ids:
+        if getattr(seat, "id") in lock_data.seat_ids:
             lock = SeatLock(
-                event_id=seat.event_id,
-                seat_id=seat.id,
+                event_id=getattr(seat, "event_id"),
+                seat_id=getattr(seat, "id"),
                 user_id=current_user.id,
                 expires_at=expires_at
             )
             
             db.add(lock)
             lock_responses.append(SeatLockResponse(
-                seat_id=seat.id,
+                seat_id=getattr(seat, "id"),
                 locked_until=expires_at
             ))
     
