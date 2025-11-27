@@ -9,6 +9,33 @@ from models import Booking, Event, User, Seat, SeatBooking
 from schemas import BookingWithUser, EventWithBookings, EventResponse, MessageResponse, AdminBookingCreate
 from dependencies import get_current_admin_user
 
+def create_seats_for_event(event: Event, db: Session) -> List[Seat]:
+    """Create seats for an event based on rows and seats_per_row"""
+    seats = []
+    
+    # Get layout from event
+    rows = getattr(event, 'rows', 10)
+    seats_per_row = getattr(event, 'seats_per_row', 10)
+    
+    for row in range(1, rows + 1):
+        for seat_num in range(1, seats_per_row + 1):
+            seat = Seat(
+                event_id=event.id,
+                row_number=row,
+                seat_number=seat_num,
+                is_available=True
+            )
+            seats.append(seat)
+            db.add(seat)
+    
+    db.flush()
+    
+    # Refresh all seats to get their IDs
+    for seat in seats:
+        db.refresh(seat)
+    
+    return seats
+
 router = APIRouter(prefix="/api/admin", tags=["Admin"])
 
 @router.get("/events", response_model=List[EventResponse])
@@ -356,6 +383,15 @@ async def get_event_seats_admin(
     )
     
     seats = seats_query.all()
+    
+    # If no seats exist, create them based on event configuration
+    if not seats:
+        seats = create_seats_for_event(event, db)
+        db.commit()
+        # Refresh the query to get the newly created seats
+        seats = db.query(Seat).filter(Seat.event_id == event_id).order_by(
+            Seat.row_number, Seat.seat_number
+        ).all()
     
     # Get booking information for each seat with user details
     seat_bookings = db.query(SeatBooking).join(Seat).filter(

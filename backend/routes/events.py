@@ -11,6 +11,21 @@ from dependencies import get_current_admin_user
 
 router = APIRouter(prefix="/api/events", tags=["Events"])
 
+def create_seats_for_new_event(event: Event, db: Session):
+    """Create seats for a newly created event"""
+    rows = getattr(event, 'rows', 10)
+    seats_per_row = getattr(event, 'seats_per_row', 10)
+    
+    for row in range(1, rows + 1):
+        for seat_num in range(1, seats_per_row + 1):
+            seat = Seat(
+                event_id=event.id,
+                row_number=row,
+                seat_number=seat_num,
+                is_available=True
+            )
+            db.add(seat)
+
 def regenerate_event_seats(event: Event, new_rows: int, new_seats_per_row: int, db: Session):
     """Regenerate seats for an event when layout changes"""
     
@@ -166,6 +181,10 @@ async def create_event(
         db.add(db_event)
         db.commit()
         db.refresh(db_event)
+        
+        # Create seats for the event
+        create_seats_for_new_event(db_event, db)
+        db.commit()
         
         return db_event
     except Exception as e:
