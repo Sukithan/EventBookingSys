@@ -21,6 +21,25 @@
             </v-col>
         </v-row>
 
+        <!-- Event Status Notifications -->
+        <v-row v-if="deactivatedMessage || expiredActiveMessage">
+            <v-col cols="12">
+                <v-alert v-if="deactivatedMessage" type="success" variant="tonal" class="mb-4">
+                    <v-icon>mdi-check-circle</v-icon>
+                    {{ deactivatedMessage }}
+                </v-alert>
+                <v-alert v-if="expiredActiveMessage" type="warning" variant="tonal" class="mb-4">
+                    <v-icon>mdi-alert</v-icon>
+                    {{ expiredActiveMessage }}
+                    <template #append>
+                        <v-btn color="warning" variant="text" to="/admin/events" size="small">
+                            Review Events
+                        </v-btn>
+                    </template>
+                </v-alert>
+            </v-col>
+        </v-row>
+
         <!-- Hero Summary -->
         <v-row>
             <v-col cols="12">
@@ -28,7 +47,9 @@
                     <div class="d-flex justify-space-between align-center flex-wrap">
                         <div>
                             <div class="text-h5 font-weight-medium">Welcome back, Administrator</div>
-                            <div class="text-body-1 mt-2 opacity-70">Quick stats and recent activity at a glance.</div>
+                            <div class="text-body-1 mt-2 opacity-70">Quick stats and recent activity at a glance. Events
+                                are
+                                automatically deactivated when their date passes.</div>
                         </div>
                         <div class="d-flex mt-4 mt-sm-0">
                             <v-btn text to="/admin/events" class="mr-3">View Events</v-btn>
@@ -109,10 +130,14 @@ const stats = ref([
     { title: 'Total Events', value: 0, icon: 'mdi-calendar-multiple', color: 'primary' },
     { title: 'Active Events', value: 0, icon: 'mdi-calendar-check', color: 'success' },
     { title: 'Upcoming Events', value: 0, icon: 'mdi-calendar-clock', color: 'info' },
+    { title: 'Expired Events', value: 0, icon: 'mdi-calendar-remove', color: 'warning' },
     { title: 'Total Bookings', value: 0, icon: 'mdi-ticket', color: 'secondary' },
-    { title: 'Cancelled Bookings', value: 0, icon: 'mdi-ticket-cancel', color: 'warning' },
+    { title: 'Cancelled Bookings', value: 0, icon: 'mdi-ticket-cancel', color: 'error' },
     { title: 'Total Users', value: 0, icon: 'mdi-account-group', color: 'purple' }
 ])
+
+const expiredActiveMessage = ref('')
+const deactivatedMessage = ref('')
 
 const bookings = ref<any[]>([])
 const bookingsLoading = ref(false)
@@ -131,6 +156,9 @@ type DashboardData = {
     total_events: number
     active_events: number
     upcoming_events: number
+    expired_events: number
+    expired_active_events: number
+    events_deactivated_now: number
     total_bookings: number
     cancelled_bookings: number
     total_users: number
@@ -150,9 +178,23 @@ const loadStats = async () => {
         stats.value[0].value = result.data.total_events
         stats.value[1].value = result.data.active_events
         stats.value[2].value = result.data.upcoming_events
-        stats.value[3].value = result.data.total_bookings
-        stats.value[4].value = result.data.cancelled_bookings
-        stats.value[5].value = result.data.total_users
+        stats.value[3].value = result.data.expired_events
+        stats.value[4].value = result.data.total_bookings
+        stats.value[5].value = result.data.cancelled_bookings
+        stats.value[6].value = result.data.total_users
+
+        // Handle notification messages
+        if (result.data.events_deactivated_now > 0) {
+            deactivatedMessage.value = `${result.data.events_deactivated_now} event(s) were automatically deactivated because their date has passed.`
+        } else {
+            deactivatedMessage.value = ''
+        }
+
+        if (result.data.expired_active_events > 0) {
+            expiredActiveMessage.value = `Warning: ${result.data.expired_active_events} expired event(s) are still marked as active.`
+        } else {
+            expiredActiveMessage.value = ''
+        }
     }
 }
 

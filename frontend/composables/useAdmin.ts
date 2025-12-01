@@ -194,6 +194,20 @@ export const useAdmin = () => {
         }
     }
 
+    const deactivateExpiredEvents = async () => {
+        try {
+            const response = await $api('/api/admin/events/deactivate-expired', {
+                method: 'POST'
+            })
+            return { success: true, data: response }
+        } catch (error: any) {
+            return {
+                success: false,
+                error: error.data?.detail || 'Failed to deactivate expired events'
+            }
+        }
+    }
+
     return {
         fetchAllEvents,
         fetchEventBookings,
@@ -206,6 +220,7 @@ export const useAdmin = () => {
         updateEventImage,
         recalculateEventStats,
         syncEventSeats,
-        createAdminBooking
+        createAdminBooking,
+        deactivateExpiredEvents
     }
 }

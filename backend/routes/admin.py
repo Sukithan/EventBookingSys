@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.orm import Session
 from sqlalchemy import String
 from typing import List, Optional
-from datetime import datetime
+from datetime import datetime, timezone
 
 from database import get_db
 from models import Booking, Event, User, Seat, SeatBooking
@@ -36,6 +36,28 @@ def create_seats_for_event(event: Event, db: Session) -> List[Seat]:
     
     return seats
 
+
+def deactivate_expired_events(db: Session) -> int:
+    """Automatically deactivate events where the event date has passed"""
+    current_time = datetime.now(timezone.utc)
+    
+    # Find all active events that have passed their event date
+    expired_events = db.query(Event).filter(
+        Event.is_active == True,
+        Event.event_date < current_time
+    ).all()
+    
+    # Deactivate each expired event
+    for event in expired_events:
+        event.is_active = False
+        db.add(event)
+    
+    # Commit the changes
+    if expired_events:
+        db.commit()
+    
+    return len(expired_events)
+
 router = APIRouter(prefix="/api/admin", tags=["Admin"])
 
 @router.get("/events", response_model=List[EventResponse])
@@ -46,6 +68,9 @@ async def get_all_events(
     db: Session = Depends(get_db)
 ):
     """Get all events including inactive (Admin only)"""
+    # Automatically deactivate expired events before returning the list
+    expired_count = deactivate_expired_events(db)
+    
     events = db.query(Event).order_by(Event.created_at.desc()).offset(skip).limit(limit).all()
     return events
 
@@ -149,15 +174,29 @@ async def get_dashboard_stats(
     db: Session = Depends(get_db)
 ):
     """Get dashboard statistics (Admin only)"""
+    # Automatically deactivate expired events before calculating stats
+    expired_count = deactivate_expired_events(db)
+    
     # Total events
     total_events = db.query(Event).count()
     active_events = db.query(Event).filter(Event.is_active == True).count()
     
-    # Upcoming events
-    current_time = datetime.utcnow()
+    # Upcoming events (active events with future dates)
+    current_time = datetime.now(timezone.utc)
     upcoming_events = db.query(Event).filter(
         Event.is_active == True,
         Event.event_date >= current_time
+    ).count()
+    
+    # Expired events that are still active (shouldn't happen after auto-deactivation)
+    expired_active_events = db.query(Event).filter(
+        Event.is_active == True,
+        Event.event_date < current_time
+    ).count()
+    
+    # Total expired events (regardless of active status)
+    expired_events = db.query(Event).filter(
+        Event.event_date < current_time
     ).count()
     
     # Total bookings
@@ -171,6 +210,9 @@ async def get_dashboard_stats(
         "total_events": total_events,
         "active_events": active_events,
         "upcoming_events": upcoming_events,
+        "expired_events": expired_events,
+        "expired_active_events": expired_active_events,
+        "events_deactivated_now": expired_count,
         "total_bookings": total_bookings,
         "cancelled_bookings": cancelled_bookings,
         "total_users": total_users
@@ -628,3 +670,23 @@ async def sync_event_seats(
         message=f"Seat layout synchronized: {total_seats} total, {available_seats} available, {booked_count} booked",
         success=True
     )
+
+
+@router.post("/events/deactivate-expired", response_model=MessageResponse)
+async def deactivate_expired_events_endpoint(
+    current_user: User = Depends(get_current_admin_user),
+    db: Session = Depends(get_db)
+):
+    """Manually deactivate all events where the event date has passed (Admin only)"""
+    expired_count = deactivate_expired_events(db)
+    
+    if expired_count > 0:
+        return MessageResponse(
+            message=f"Successfully deactivated {expired_count} expired event(s)",
+            success=True
+        )
+    else:
+        return MessageResponse(
+            message="No expired events found to deactivate",
+            success=True
+        )

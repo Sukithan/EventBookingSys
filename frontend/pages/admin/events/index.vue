@@ -1,7 +1,22 @@
 <template>
     <v-container>
-        <PageHeader title="Manage Events" action-text="Create Event" action-to="/admin/events/create"
-            action-icon="mdi-plus" />
+        <PageHeader title="Manage Events">
+            <template #actions>
+                <v-btn color="secondary" variant="outlined" @click="deactivateExpiredEventsManually"
+                    :loading="deactivating" class="mr-2">
+                    <v-icon start>mdi-clock-outline</v-icon>
+                    Update Expired Events
+                </v-btn>
+                <v-btn color="primary" variant="outlined" @click="loadEvents" :loading="loading" class="mr-2">
+                    <v-icon start>mdi-refresh</v-icon>
+                    Refresh
+                </v-btn>
+                <v-btn color="primary" variant="elevated" to="/admin/events/create">
+                    <v-icon start>mdi-plus</v-icon>
+                    Create Event
+                </v-btn>
+            </template>
+        </PageHeader>
 
         <LoadingSkeleton v-if="loading" type="article" :count="4" />
 
@@ -29,12 +44,13 @@ definePageMeta({
     middleware: 'admin'
 })
 
-const { fetchAllEvents } = useAdmin()
+const { fetchAllEvents, deactivateExpiredEvents } = useAdmin()
 const { deleteEvent } = useEvents()
 const router = useRouter()
 
 const loading = ref(false)
 const deleting = ref(false)
+const deactivating = ref(false)
 const events = ref<any[]>([])
 const deleteDialog = ref(false)
 const selectedEvent = ref<any>(null)
@@ -77,6 +93,23 @@ const confirmDelete = async () => {
         snackbarMessage.value = 'Event deleted successfully'
         snackbarColor.value = 'success'
         deleteDialog.value = false
+        await loadEvents()
+    } else {
+        snackbarMessage.value = result.error
+        snackbarColor.value = 'error'
+    }
+    snackbar.value = true
+}
+
+const deactivateExpiredEventsManually = async () => {
+    deactivating.value = true
+    const result = await deactivateExpiredEvents()
+    deactivating.value = false
+
+    if (result.success) {
+        snackbarMessage.value = (result.data as any)?.message || 'Expired events updated successfully'
+        snackbarColor.value = 'success'
+        // Refresh the events list to show updated statuses
         await loadEvents()
     } else {
         snackbarMessage.value = result.error
